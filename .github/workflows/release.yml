@@ -1,0 +1,53 @@
+# Release workflow - creates releases and publishes Docker image
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: latest
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update major version tag
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          # Extract major version (v1.2.3 -> v1)
+          MAJOR_VERSION=$(echo "$TAG_NAME" | sed 's/\..*//')
+          # Update/create the major version tag
+          git tag -fa "$MAJOR_VERSION" -m "Update $MAJOR_VERSION tag"
+          git push origin "$MAJOR_VERSION" --force

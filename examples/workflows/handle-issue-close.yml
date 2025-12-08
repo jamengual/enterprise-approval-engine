@@ -1,0 +1,32 @@
+# Handle Issue Close Events
+# This workflow handles when approval issues are closed (manually or by the action)
+# If on_closed.delete_tag is true, it will delete any associated tags
+
+name: Handle Issue Close
+
+on:
+  issues:
+    types: [closed]
+
+jobs:
+  handle-close:
+    # Only run for issues with our label
+    if: contains(github.event.issue.labels.*.name, 'approval-required')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: issueops/approvals@v1
+        id: close
+        with:
+          action: close-issue
+          issue_number: ${{ github.event.issue.number }}
+          issue_action: ${{ github.event.action }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Report result
+        run: |
+          echo "Status: ${{ steps.close.outputs.status }}"
+          if [ -n "${{ steps.close.outputs.tag_deleted }}" ]; then
+            echo "Deleted tag: ${{ steps.close.outputs.tag_deleted }}"
+          fi

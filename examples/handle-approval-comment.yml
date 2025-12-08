@@ -1,0 +1,46 @@
+# Example workflow: Handle approval comments
+# .github/workflows/handle-approval-comment.yml
+
+name: Handle Approval Comments
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  process-comment:
+    # Only run on issues with the approval-required label
+    if: contains(github.event.issue.labels.*.name, 'approval-required')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Process Approval Comment
+        id: process
+        uses: issueops/approvals@v1
+        with:
+          action: process-comment
+          issue_number: ${{ github.event.issue.number }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          # For team membership checks, use a GitHub App token:
+          # app_id: ${{ vars.APP_ID }}
+          # app_private_key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Handle Approval Result
+        if: steps.process.outputs.status == 'approved'
+        run: |
+          echo "Request approved!"
+          echo "Approvers: ${{ steps.process.outputs.approvers }}"
+          echo "Tag created: ${{ steps.process.outputs.tag }}"
+          # Trigger deployment workflow
+          # gh workflow run deploy.yml -f version=${{ steps.process.outputs.tag }}
+
+      - name: Handle Denial Result
+        if: steps.process.outputs.status == 'denied'
+        run: |
+          echo "Request denied by ${{ steps.process.outputs.denier }}"
+          exit 0  # Don't fail the workflow on denial

@@ -1,3 +1,19 @@
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+go.work
+go.work.sum
+coverage.out
+
+# Local tooling
+.claude-flow/
+.hive-mind/
+
 # Logs
 logs
 *.log

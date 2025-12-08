@@ -1,0 +1,20 @@
+# Minimal IssueOps Approvals Configuration
+# This is the simplest possible setup for approval workflows
+
+version: 1
+
+policies:
+  reviewers:
+    approvers:
+      - alice
+      - bob
+      - charlie
+    min_approvals: 1
+
+workflows:
+  default:
+    require:
+      - policy: reviewers
+    on_approved:
+      close_issue: true
+      comment: "✅ Approved!"

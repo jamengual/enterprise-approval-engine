@@ -1,0 +1,223 @@
+# Example .github/approvals.yml
+# This file defines approval policies and workflows for IssueOps
+
+version: 1
+
+# Global defaults
+defaults:
+  timeout: 72h
+  allow_self_approval: false
+  issue_labels:
+    - approval-required
+    - issueops
+
+# Reusable approval policies
+policies:
+  #############################################
+  # SIMPLE FORMAT - flat list of approvers
+  #############################################
+
+  # Any 2 of these developers
+  dev-team:
+    approvers:
+      - alice
+      - bob
+      - charlie
+    min_approvals: 2
+
+  # Team-based: any 2 from the team (requires GitHub App token)
+  platform-team:
+    approvers:
+      - team:platform-engineers
+    min_approvals: 2
+
+  # Strict: ALL must approve
+  security-review:
+    approvers:
+      - team:security
+      - security-lead
+    require_all: true
+
+  #############################################
+  # ADVANCED FORMAT - per-source thresholds
+  #############################################
+
+  # Complex AND gate: 2 from platform AND 1 from security AND alice
+  production-gate:
+    from:
+      - team: platform-engineers
+        min_approvals: 2        # 2 of the platform team
+
+      - team: security
+        min_approvals: 1        # 1 of the security team
+
+      - user: alice             # alice must also approve
+    logic: and                  # ALL sources must be satisfied
+
+  # Flexible OR gate: all security OR 2 platform members
+  flexible-review:
+    from:
+      - team: security
+        require_all: true       # All security team members
+
+      - team: platform-engineers
+        min_approvals: 2        # OR just 2 platform members
+    logic: or                   # ANY source being satisfied is enough
+
+  # Executive approval: any one exec can approve
+  exec-approval:
+    from:
+      - user: ceo
+      - user: cto
+      - user: vp-engineering
+    logic: or                   # Any one of them
+
+  # Lead approval: 2 of the leads
+  leads:
+    from:
+      - users: [tech-lead, product-lead, design-lead, qa-lead]
+        min_approvals: 2
+    # logic defaults to "and" (but with one source, it doesn't matter)
+
+  # Mixed teams and individuals with AND
+  release-gate:
+    from:
+      - team: devops
+        min_approvals: 1        # 1 from devops
+
+      - users: [release-manager, tech-lead]
+        min_approvals: 1        # 1 of these managers
+    logic: and                  # Both sources required
+
+  #############################################
+  # INLINE LOGIC - mix AND/OR between sources
+  #############################################
+
+  # (2 security AND 2 platform) OR alice
+  # Read as: "Need 2 from security AND 2 from platform, OR just alice can approve"
+  complex-gate:
+    from:
+      - team: security
+        min_approvals: 2
+        logic: and               # AND with next source
+
+      - team: platform-engineers
+        min_approvals: 2
+        logic: or                # OR with next source
+
+      - user: alice             # alice alone can satisfy
+
+  # (security AND platform) OR (alice AND bob) OR manager
+  # Three approval paths
+  multi-path:
+    from:
+      - team: security
+        min_approvals: 1
+        logic: and
+      - team: platform-engineers
+        min_approvals: 1
+        logic: or                # End of first AND group
+      - user: alice
+        logic: and
+      - user: bob
+        logic: or                # End of second AND group
+      - user: manager           # Third path: just manager
+
+# Approval workflows
+workflows:
+  # Dev deployment - auto-increment patch versions
+  dev-deploy:
+    description: "Dev deployment (auto-versioned)"
+    trigger:
+      environment: dev
+    require:
+      - policy: dev-team
+        min_approvals: 1
+    on_approved:
+      close_issue: true
+      tagging:
+        enabled: true
+        start_version: "0.1.0"      # No 'v' prefix, start at 0.1.0
+        auto_increment: patch        # Auto-bump: 0.1.0 -> 0.1.1 -> 0.1.2
+        env_prefix: "dev-"           # Creates: dev-0.1.0, dev-0.1.1, etc.
+
+  # Staging deployment - manual version with v prefix
+  staging-deploy:
+    description: "Staging deployment approval"
+    trigger:
+      environment: staging
+    require:
+      - policy: dev-team
+        min_approvals: 1
+    issue:
+      title: "Staging Deploy Approval: {{version}}"
+      labels:
+        - staging
+        - deploy
+    on_approved:
+      close_issue: true
+      comment: "Approved! Created tag {{version}} for staging."
+      tagging:
+        enabled: true
+        start_version: "v1.0.0"     # 'v' prefix, inferred from start_version
+        auto_increment: minor        # Auto-bump minor: v1.0.0 -> v1.1.0 -> v1.2.0
+        env_prefix: "staging-"       # Creates: staging-v1.0.0, staging-v1.1.0
+
+  # Production deployment - multiple approval paths (OR logic)
+  production-deploy:
+    description: "Production deployment requires approval"
+    trigger:
+      environment: production
+    require:
+      # Path 1: 2 platform engineers approve
+      - policy: platform-team
+
+      # Path 2: Security review (all must approve)
+      - policy: security-review
+
+      # Path 3: Mixed production approvers
+      - policy: production-approvers
+
+    issue:
+      title: "PROD Approval Required: {{version}}"
+      labels:
+        - production
+        - deploy
+        - high-priority
+      assignees_from_policy: true
+    on_approved:
+      close_issue: true
+      comment: "Production deployment approved via {{satisfied_group}}. Tag {{version}} created."
+      tagging:
+        enabled: true
+        start_version: "v1.0.0"     # Production uses v prefix
+        # No auto_increment - requires manual version input for production
+    on_denied:
+      close_issue: true
+      comment: "Production deployment denied by {{denier}}."
+
+  # Database migration - requires DBA approval
+  database-migration:
+    description: "Database migrations require DBA approval"
+    trigger:
+      type: migration
+    require:
+      - approvers:
+          - dba-lead
+          - team:dba
+        min_approvals: 1
+    issue:
+      title: "DB Migration Approval: {{version}}"
+      labels:
+        - database
+        - migration
+    on_approved:
+      close_issue: true
+      comment: "Migration approved. Proceed with caution."
+
+# Semver configuration
+semver:
+  prefix: "v"
+  strategy: input
+  validate: true
+  allow_prerelease: true

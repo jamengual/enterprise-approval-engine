@@ -1,0 +1,31 @@
+FROM golang:1.22-alpine AS builder
+
+WORKDIR /app
+
+# Install git for go mod download
+RUN apk add --no-cache git ca-certificates
+
+# Copy go mod files first for caching
+COPY go.mod go.sum* ./
+RUN go mod download
+
+# Copy source code
+COPY . .
+
+# Build the binary
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /issueops-approvals ./cmd/action
+
+# Final stage - minimal image
+FROM alpine:3.19
+
+# Install ca-certificates for HTTPS
+RUN apk add --no-cache ca-certificates git
+
+# Copy binary from builder
+COPY --from=builder /issueops-approvals /issueops-approvals
+
+# Run as non-root user
+RUN adduser -D -u 1000 appuser
+USER appuser
+
+ENTRYPOINT ["/issueops-approvals"]

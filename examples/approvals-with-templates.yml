@@ -1,0 +1,164 @@
+# Example: IssueOps Approvals with Custom Templates and Tag Management
+# This example shows:
+# - Custom issue body templates (inline and file-based)
+# - Per-environment tagging with auto-increment
+# - Tag deletion on issue close
+# - Multiple approval groups with OR logic
+
+version: 1
+
+defaults:
+  timeout: 72h
+  allow_self_approval: false
+  issue_labels:
+    - "approval-required"
+    - "issueops"
+
+# Reusable approval policies
+policies:
+  dev-team:
+    approvers:
+      - alice
+      - bob
+      - charlie
+    min_approvals: 1
+
+  platform-team:
+    approvers:
+      - team:platform-engineers
+    min_approvals: 2
+
+  security-review:
+    approvers:
+      - team:security
+      - security-lead
+    min_approvals: 1
+
+  # Advanced policy: multiple sources with AND logic
+  production-gate:
+    from:
+      - team: platform-engineers
+        min_approvals: 2
+      - team: security
+        min_approvals: 1
+    logic: and  # Both sources must be satisfied
+
+# Workflow definitions
+workflows:
+  # Development environment - auto-approve, simple tagging
+  dev-deploy:
+    description: "Development deployment"
+    trigger:
+      environment: dev
+    require:
+      - policy: dev-team
+    issue:
+      title: "Deploy {{version}} to dev"
+      labels:
+        - "dev"
+        - "deploy"
+    on_approved:
+      tagging:
+        enabled: true
+        start_version: "0.1.0"
+        auto_increment: patch
+        env_prefix: "dev-"
+      close_issue: true
+      comment: "✅ Deployed to dev! Tag: {{version}}"
+    on_closed:
+      delete_tag: true  # Delete dev tags when issue is closed
+      comment: "🗑️ Dev deployment cancelled. Tag {{tag}} deleted."
+
+  # QA environment
+  qa-deploy:
+    description: "QA deployment requires dev team approval"
+    trigger:
+      environment: qa
+    require:
+      - policy: dev-team
+    issue:
+      title: "🧪 QA Deploy: {{version}}"
+      labels:
+        - "qa"
+        - "deploy"
+    on_approved:
+      tagging:
+        enabled: true
+        start_version: "v1.0.0"
+        auto_increment: patch
+        env_prefix: "qa-"
+      close_issue: true
+    on_closed:
+      delete_tag: true
+
+  # Staging environment
+  staging-deploy:
+    description: "Staging deployment requires platform team approval"
+    trigger:
+      environment: staging
+    require:
+      - policy: platform-team
+      - policy: dev-team
+        min_approvals: 2  # Override: need 2 devs for staging
+    issue:
+      title: "🎭 Staging Deploy: {{version}}"
+      labels:
+        - "staging"
+        - "deploy"
+    on_approved:
+      tagging:
+        enabled: true
+        start_version: "v1.0.0"
+        auto_increment: minor
+        env_prefix: "staging-"
+      close_issue: true
+    on_closed:
+      delete_tag: false  # Keep staging tags even if cancelled
+
+  # Production environment - custom template, strict approval
+  production-deploy:
+    description: "Production deployment requires platform AND security approval"
+    trigger:
+      environment: production
+    require:
+      - policy: production-gate  # Uses advanced AND logic
+    issue:
+      title: "🚀 Production Deploy: {{version}}"
+      # Custom template from file
+      body_file: "templates/deployment-promotion.md"
+      labels:
+        - "production"
+        - "deploy"
+        - "needs-approval"
+      assignees_from_policy: true
+    on_approved:
+      tagging:
+        enabled: true
+        start_version: "v1.0.0"
+        # No auto_increment = manual version required
+      close_issue: true
+      comment: |
+        ## ✅ Production Deployment Approved
+
+        **Version:** {{version}}
+        **Approved by:** {{satisfied_group}}
+
+        The deployment will begin shortly.
+    on_denied:
+      close_issue: true
+      comment: |
+        ## ❌ Production Deployment Denied
+
+        **Denied by:** @{{denier}}
+
+        Please address any concerns and create a new deployment request.
+    on_closed:
+      delete_tag: false  # NEVER delete production tags
+      comment: "Production deployment request closed."
+
+# Semver configuration
+semver:
+  prefix: "v"
+  strategy: input
+  validate: true
+  allow_prerelease: true

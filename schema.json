@@ -1,0 +1,324 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/issueops/approvals/main/schema.json",
+  "title": "IssueOps Approvals Configuration",
+  "description": "Configuration schema for IssueOps Approvals action",
+  "type": "object",
+  "required": ["version", "workflows"],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "description": "Configuration schema version",
+      "const": 1
+    },
+    "defaults": {
+      "type": "object",
+      "description": "Default settings applied to all workflows",
+      "properties": {
+        "timeout": {
+          "type": "string",
+          "description": "Default timeout for approval requests (e.g., '72h', '24h')",
+          "pattern": "^[0-9]+[hms]$"
+        },
+        "allow_self_approval": {
+          "type": "boolean",
+          "description": "Whether requestors can approve their own requests",
+          "default": false
+        },
+        "issue_labels": {
+          "type": "array",
+          "description": "Labels added to all approval issues",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "policies": {
+      "type": "object",
+      "description": "Reusable approval policies",
+      "additionalProperties": {
+        "$ref": "#/definitions/policy"
+      }
+    },
+    "workflows": {
+      "type": "object",
+      "description": "Approval workflow definitions",
+      "additionalProperties": {
+        "$ref": "#/definitions/workflow"
+      }
+    },
+    "semver": {
+      "type": "object",
+      "description": "Semantic versioning configuration",
+      "properties": {
+        "prefix": {
+          "type": "string",
+          "description": "Tag prefix (e.g., 'v')",
+          "default": "v"
+        },
+        "strategy": {
+          "type": "string",
+          "description": "Version strategy",
+          "enum": ["input", "auto", "conventional"],
+          "default": "input"
+        },
+        "validate": {
+          "type": "boolean",
+          "description": "Validate semver format",
+          "default": true
+        },
+        "allow_prerelease": {
+          "type": "boolean",
+          "description": "Allow prerelease versions (e.g., v1.0.0-beta.1)",
+          "default": true
+        },
+        "auto": {
+          "type": "object",
+          "description": "Auto-increment configuration",
+          "properties": {
+            "major_labels": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "minor_labels": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "patch_labels": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "policy": {
+      "type": "object",
+      "description": "Approval policy definition",
+      "oneOf": [
+        {
+          "properties": {
+            "approvers": {
+              "type": "array",
+              "description": "List of approvers (users or 'team:name')",
+              "items": { "type": "string" }
+            },
+            "min_approvals": {
+              "type": "integer",
+              "description": "Minimum number of approvals required",
+              "minimum": 1
+            },
+            "require_all": {
+              "type": "boolean",
+              "description": "Require all approvers (AND logic)"
+            }
+          }
+        },
+        {
+          "properties": {
+            "from": {
+              "type": "array",
+              "description": "Advanced approver sources with per-source thresholds",
+              "items": {
+                "$ref": "#/definitions/approverSource"
+              }
+            },
+            "logic": {
+              "type": "string",
+              "description": "How to combine sources",
+              "enum": ["and", "or"],
+              "default": "and"
+            }
+          },
+          "required": ["from"]
+        }
+      ]
+    },
+    "approverSource": {
+      "type": "object",
+      "description": "Individual approver source",
+      "properties": {
+        "team": {
+          "type": "string",
+          "description": "Team slug (e.g., 'platform-engineers')"
+        },
+        "user": {
+          "type": "string",
+          "description": "Single user"
+        },
+        "users": {
+          "type": "array",
+          "description": "List of users",
+          "items": { "type": "string" }
+        },
+        "min_approvals": {
+          "type": "integer",
+          "description": "Minimum approvals from this source",
+          "minimum": 1
+        },
+        "require_all": {
+          "type": "boolean",
+          "description": "Require all from this source"
+        },
+        "logic": {
+          "type": "string",
+          "description": "Logic connector to next source",
+          "enum": ["and", "or"]
+        }
+      }
+    },
+    "workflow": {
+      "type": "object",
+      "description": "Approval workflow",
+      "required": ["require"],
+      "properties": {
+        "description": {
+          "type": "string",
+          "description": "Workflow description"
+        },
+        "trigger": {
+          "type": "object",
+          "description": "Trigger conditions",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "require": {
+          "type": "array",
+          "description": "Approval requirements (OR logic between items)",
+          "items": {
+            "$ref": "#/definitions/requirement"
+          }
+        },
+        "issue": {
+          "$ref": "#/definitions/issueConfig"
+        },
+        "on_approved": {
+          "$ref": "#/definitions/actionConfig"
+        },
+        "on_denied": {
+          "$ref": "#/definitions/actionConfig"
+        },
+        "on_closed": {
+          "$ref": "#/definitions/onClosedConfig"
+        }
+      }
+    },
+    "requirement": {
+      "type": "object",
+      "description": "Approval requirement",
+      "properties": {
+        "policy": {
+          "type": "string",
+          "description": "Reference to a defined policy"
+        },
+        "approvers": {
+          "type": "array",
+          "description": "Inline approvers",
+          "items": { "type": "string" }
+        },
+        "min_approvals": {
+          "type": "integer",
+          "description": "Override minimum approvals",
+          "minimum": 1
+        },
+        "require_all": {
+          "type": "boolean",
+          "description": "Require all approvers"
+        }
+      }
+    },
+    "issueConfig": {
+      "type": "object",
+      "description": "Issue configuration",
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "Issue title template"
+        },
+        "body": {
+          "type": "string",
+          "description": "Custom issue body template (Go template syntax)"
+        },
+        "body_file": {
+          "type": "string",
+          "description": "Path to custom template file"
+        },
+        "labels": {
+          "type": "array",
+          "description": "Labels to add to the issue",
+          "items": { "type": "string" }
+        },
+        "assignees_from_policy": {
+          "type": "boolean",
+          "description": "Assign users from approval policies"
+        }
+      }
+    },
+    "actionConfig": {
+      "type": "object",
+      "description": "Actions on approval/denial",
+      "properties": {
+        "create_tag": {
+          "type": "boolean",
+          "description": "Create a git tag"
+        },
+        "close_issue": {
+          "type": "boolean",
+          "description": "Close the issue"
+        },
+        "comment": {
+          "type": "string",
+          "description": "Comment to post"
+        },
+        "tagging": {
+          "$ref": "#/definitions/taggingConfig"
+        }
+      }
+    },
+    "taggingConfig": {
+      "type": "object",
+      "description": "Tag creation configuration",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable tag creation"
+        },
+        "start_version": {
+          "type": "string",
+          "description": "Starting version (e.g., 'v1.0.0' or '1.0.0')"
+        },
+        "prefix": {
+          "type": "string",
+          "description": "Version prefix"
+        },
+        "auto_increment": {
+          "type": "string",
+          "description": "Auto-increment type",
+          "enum": ["major", "minor", "patch"]
+        },
+        "env_prefix": {
+          "type": "string",
+          "description": "Environment prefix (e.g., 'dev-')"
+        }
+      }
+    },
+    "onClosedConfig": {
+      "type": "object",
+      "description": "Actions when issue is manually closed",
+      "properties": {
+        "delete_tag": {
+          "type": "boolean",
+          "description": "Delete the associated tag"
+        },
+        "comment": {
+          "type": "string",
+          "description": "Comment to post on close"
+        }
+      }
+    }
+  }
+}

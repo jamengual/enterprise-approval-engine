@@ -1,0 +1,82 @@
+# Handle Approval Comments
+# This workflow processes approval/denial comments on approval request issues
+
+name: Handle Approval Comments
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  process-comment:
+    # Only run for issues with the approval-required label
+    if: |
+      github.event.issue.pull_request == null &&
+      contains(github.event.issue.labels.*.name, 'approval-required')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Optional: Use GitHub App token for team membership checks
+      # Uncomment if using team-based approvers
+      # - name: Generate App Token
+      #   id: app-token
+      #   uses: actions/create-github-app-token@v1
+      #   with:
+      #     app-id: ${{ vars.APP_ID }}
+      #     private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Process Comment
+        id: process
+        uses: issueops/approvals@v1
+        with:
+          action: process-comment
+          token: ${{ secrets.GITHUB_TOKEN }}
+          # token: ${{ steps.app-token.outputs.token }}  # Use this for team support
+
+      - name: Handle Approved
+        if: steps.process.outputs.status == 'approved'
+        run: |
+          echo "## ✅ Approval Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status:** Approved" >> $GITHUB_STEP_SUMMARY
+          echo "- **Approved by:** ${{ steps.process.outputs.approvers }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Satisfied group:** ${{ steps.process.outputs.satisfied_group }}" >> $GITHUB_STEP_SUMMARY
+          if [ -n "${{ steps.process.outputs.tag }}" ]; then
+            echo "- **Tag created:** ${{ steps.process.outputs.tag }}" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Handle Denied
+        if: steps.process.outputs.status == 'denied'
+        run: |
+          echo "## ❌ Request Denied" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Denied by:** ${{ steps.process.outputs.denier }}" >> $GITHUB_STEP_SUMMARY
+
+      - name: Handle Pending
+        if: steps.process.outputs.status == 'pending'
+        run: |
+          echo "## ⏳ Still Pending" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Current approvers: ${{ steps.process.outputs.approvers }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "More approvals needed." >> $GITHUB_STEP_SUMMARY
+
+      # Optional: Trigger deployment on approval
+      - name: Trigger Deployment
+        if: steps.process.outputs.status == 'approved'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // You can trigger another workflow here
+            // Example: trigger deploy.yml with the approved version
+            console.log('Deployment approved!');
+            console.log('Tag:', '${{ steps.process.outputs.tag }}');
+            // await github.rest.actions.createWorkflowDispatch({
+            //   owner: context.repo.owner,
+            //   repo: context.repo.repo,
+            //   workflow_id: 'deploy.yml',
+            //   ref: 'main',
+            //   inputs: { version: '${{ steps.process.outputs.tag }}' }
+            // });

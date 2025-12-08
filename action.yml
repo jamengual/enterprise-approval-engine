@@ -1,0 +1,86 @@
+name: 'Enterprise Approval Engine'
+description: 'Enterprise-grade approval workflows with per-group thresholds (X of N), OR logic between groups, and automatic semver tag creation'
+author: 'jamengual'
+
+branding:
+  icon: 'check-circle'
+  color: 'green'
+
+inputs:
+  action:
+    description: 'Action to perform: request, check, process-comment, close-issue'
+    required: true
+
+  workflow:
+    description: 'Name of the workflow from approvals.yml to use'
+    required: false
+
+  version:
+    description: 'Semver version for tag creation (e.g., 1.2.3 or v1.2.3)'
+    required: false
+
+  issue_number:
+    description: 'Issue number for check action'
+    required: false
+
+  wait:
+    description: 'Wait for approval (polling) in check action'
+    required: false
+    default: 'false'
+
+  timeout:
+    description: 'Timeout for waiting (e.g., 24h, 1h30m)'
+    required: false
+    default: '72h'
+
+  token:
+    description: 'GitHub token for API operations'
+    required: true
+
+  app_id:
+    description: 'GitHub App ID for team membership checks'
+    required: false
+
+  app_private_key:
+    description: 'GitHub App private key for team membership checks'
+    required: false
+
+  config_path:
+    description: 'Path to approvals.yml config file'
+    required: false
+    default: '.github/approvals.yml'
+
+  issue_action:
+    description: 'Issue event action (closed, reopened) for close-issue action'
+    required: false
+
+outputs:
+  status:
+    description: 'Approval status: pending, approved, denied, timeout'
+
+  issue_number:
+    description: 'Issue number for the approval request'
+
+  issue_url:
+    description: 'URL to the approval issue'
+
+  approvers:
+    description: 'Comma-separated list of users who approved'
+
+  denier:
+    description: 'User who denied the request'
+
+  tag:
+    description: 'Created tag name (if applicable)'
+
+  satisfied_group:
+    description: 'Name of the approval group that was satisfied'
+
+  tag_deleted:
+    description: 'Tag that was deleted (for close-issue action)'
+
+runs:
+  using: 'docker'
+  image: 'Dockerfile'
+  args:
+    - ${{ inputs.action }}

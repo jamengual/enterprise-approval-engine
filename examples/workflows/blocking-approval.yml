@@ -1,0 +1,87 @@
+# Blocking Approval Workflow
+# This workflow requests approval and waits (polls) until approved before continuing
+# Note: This keeps the workflow running, which consumes runner minutes
+
+name: Deploy with Blocking Approval
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+      version:
+        description: 'Version to deploy'
+        required: true
+        type: string
+
+jobs:
+  request-approval:
+    runs-on: ubuntu-latest
+    outputs:
+      issue_number: ${{ steps.request.outputs.issue_number }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Request Approval
+        id: request
+        uses: issueops/approvals@v1
+        with:
+          action: request
+          workflow: ${{ inputs.environment }}-deploy
+          version: ${{ inputs.version }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Notify
+        run: |
+          echo "Approval requested: ${{ steps.request.outputs.issue_url }}"
+
+  wait-for-approval:
+    needs: request-approval
+    runs-on: ubuntu-latest
+    outputs:
+      status: ${{ steps.check.outputs.status }}
+      tag: ${{ steps.check.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Wait for Approval
+        id: check
+        uses: issueops/approvals@v1
+        with:
+          action: check
+          issue_number: ${{ needs.request-approval.outputs.issue_number }}
+          wait: 'true'
+          timeout: '4h'  # Max wait time
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check Result
+        if: steps.check.outputs.status != 'approved'
+        run: |
+          echo "Approval status: ${{ steps.check.outputs.status }}"
+          exit 1
+
+  deploy:
+    needs: [request-approval, wait-for-approval]
+    if: needs.wait-for-approval.outputs.status == 'approved'
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy
+        run: |
+          echo "Deploying version ${{ needs.wait-for-approval.outputs.tag }} to ${{ inputs.environment }}"
+          # Add your deployment steps here
+          # e.g., kubectl apply, terraform apply, etc.
+
+      - name: Summary
+        run: |
+          echo "## ✅ Deployment Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment:** ${{ inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version:** ${{ needs.wait-for-approval.outputs.tag }}" >> $GITHUB_STEP_SUMMARY

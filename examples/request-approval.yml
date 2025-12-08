@@ -1,0 +1,47 @@
+# Example workflow: Request deployment approval
+# .github/workflows/request-approval.yml
+
+name: Request Deployment Approval
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+      version:
+        description: 'Version to deploy (e.g., 1.2.3)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  request-approval:
+    runs-on: ubuntu-latest
+    outputs:
+      issue_number: ${{ steps.request.outputs.issue_number }}
+      issue_url: ${{ steps.request.outputs.issue_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Request Approval
+        id: request
+        uses: issueops/approvals@v1
+        with:
+          action: request
+          workflow: ${{ inputs.environment }}-deploy
+          version: ${{ inputs.version }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Output Results
+        run: |
+          echo "Created approval issue #${{ steps.request.outputs.issue_number }}"
+          echo "URL: ${{ steps.request.outputs.issue_url }}"
+          echo "Waiting for approval..."
