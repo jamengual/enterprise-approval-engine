@@ -9,14 +9,16 @@ on:
         required: true
         type: string
       workflow_name:
-        description: 'Workflow to use from external config'
+        description: 'Environment/Workflow to deploy'
         required: true
-        default: 'test-deploy'
+        default: 'deploy-dev'
         type: choice
         options:
-          - test-deploy
+          - deploy-dev
+          - deploy-qa
+          - deploy-stage
+          - deploy-prod
           - release
-          - major-release
 
 permissions:
   contents: write
