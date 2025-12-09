@@ -20,14 +20,46 @@ type Handler struct {
 	config *config.Config
 }
 
+// HandlerOptions configures how the handler loads configuration.
+type HandlerOptions struct {
+	ConfigPath string
+	ConfigRepo string // Optional: owner/repo for external config (e.g., "myorg/.github")
+}
+
 // NewHandler creates a new action handler.
 func NewHandler(ctx context.Context, configPath string) (*Handler, error) {
+	return NewHandlerWithOptions(ctx, HandlerOptions{ConfigPath: configPath})
+}
+
+// NewHandlerWithOptions creates a new action handler with additional options.
+func NewHandlerWithOptions(ctx context.Context, opts HandlerOptions) (*Handler, error) {
 	client, err := github.NewClient(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create GitHub client: %w", err)
 	}
 
-	cfg, err := config.Load(configPath)
+	var cfg *config.Config
+	if opts.ConfigRepo != "" {
+		// Use external config with fallback
+		// Get current repo name from environment
+		repoName := ""
+		if repo := os.Getenv("GITHUB_REPOSITORY"); repo != "" {
+			parts := strings.Split(repo, "/")
+			if len(parts) == 2 {
+				repoName = parts[1]
+			}
+		}
+
+		// Create fetch function that uses GitHub client
+		fetchFunc := func(repo, path string) ([]byte, error) {
+			return client.GetFileContentsFromRepo(ctx, repo, path)
+		}
+
+		cfg, _, err = config.LoadWithFallback(opts.ConfigRepo, repoName, opts.ConfigPath, fetchFunc)
+	} else {
+		// Use local config only
+		cfg, err = config.Load(opts.ConfigPath)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to load config: %w", err)
 	}

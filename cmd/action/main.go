@@ -42,8 +42,17 @@ func run() error {
 		configPath = ".github/approvals.yml"
 	}
 
-	// Create handler
-	handler, err := action.NewHandler(ctx, configPath)
+	// Get external config repo (optional)
+	configRepo := action.GetInput("config_repo")
+	if configRepo == "" {
+		configRepo = action.GetInput("config-repo")
+	}
+
+	// Create handler with options
+	handler, err := action.NewHandlerWithOptions(ctx, action.HandlerOptions{
+		ConfigPath: configPath,
+		ConfigRepo: configRepo,
+	})
 	if err != nil {
 		return err
 	}
