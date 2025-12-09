@@ -1,3 +1,5 @@
+// Package action provides GitHub Action handlers for the IssueOps approval system.
+// This includes request creation, comment processing, and pipeline management.
 package action
 
 import (
@@ -12,6 +14,8 @@ import (
 )
 
 // PipelineProcessor handles progressive deployment pipelines.
+// It manages multi-stage approval workflows where a single issue
+// tracks deployment through multiple environments (e.g., dev → qa → stage → prod).
 type PipelineProcessor struct {
 	handler *Handler
 }
