@@ -2,6 +2,7 @@ package action
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -307,6 +308,16 @@ func GeneratePipelineIssueBody(data *TemplateData, state *IssueState, pipeline *
 		sb.WriteString(GenerateCommitList(state.Commits))
 		sb.WriteString("\n")
 	}
+
+	// Append the hidden state marker (required for ProcessComment to work)
+	stateJSON, err := json.Marshal(state)
+	if err != nil {
+		// Fall back without state if marshal fails
+		return sb.String()
+	}
+	sb.WriteString("\n<!-- issueops-state:")
+	sb.WriteString(string(stateJSON))
+	sb.WriteString(" -->")
 
 	return sb.String()
 }
