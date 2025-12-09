@@ -213,47 +213,52 @@ func (h *Handler) generatePipelineIssueBody(ctx context.Context, data *TemplateD
 	data.State.Pipeline = stageNames
 	data.State.CurrentStage = 0
 
-	// Fetch PR and commit data if tracking is enabled
+	// Store the release strategy type for display
+	data.State.ReleaseStrategy = string(pipeline.ReleaseStrategy.GetType())
+
+	// Fetch PR and commit data based on release strategy
 	if pipeline.TrackPRs || pipeline.TrackCommits {
-		// Try to find previous tag to compare from
+		// Use the ReleaseTracker to get content based on strategy
+		tracker := NewReleaseTracker(h.client, pipeline.ReleaseStrategy, data.Version)
+
+		// For tag strategy, we need the previous tag
 		previousTag := ""
-		if data.Version != "" {
-			prevTag, err := h.client.GetPreviousTag(ctx, data.Version)
-			if err == nil && prevTag != "" {
-				previousTag = prevTag
-				data.State.PreviousTag = previousTag
-				data.PreviousVersion = previousTag
+		if pipeline.ReleaseStrategy.GetType() == config.StrategyTag || pipeline.ReleaseStrategy.GetType() == "" {
+			if data.Version != "" {
+				prevTag, err := h.client.GetPreviousTag(ctx, data.Version)
+				if err == nil && prevTag != "" {
+					previousTag = prevTag
+				}
+			}
+			// If no previous tag from version, try to get latest tag
+			if previousTag == "" {
+				tags, err := h.client.ListTags(ctx, 1)
+				if err == nil && len(tags) > 0 {
+					previousTag = tags[0]
+				}
 			}
 		}
+		data.State.PreviousTag = previousTag
+		data.PreviousVersion = previousTag
 
-		// If no previous tag from version, try to get latest tag
-		if previousTag == "" {
-			tags, err := h.client.ListTags(ctx, 1)
-			if err == nil && len(tags) > 0 {
-				previousTag = tags[0]
-				data.State.PreviousTag = previousTag
-				data.PreviousVersion = previousTag
+		// Get release contents using the configured strategy
+		contents, err := tracker.GetReleaseContents(ctx, previousTag)
+		if err == nil && contents != nil {
+			// Convert PRs to state format
+			if pipeline.TrackPRs {
+				for _, pr := range contents.PRs {
+					data.State.PRs = append(data.State.PRs, PRInfo{
+						Number: pr.Number,
+						Title:  pr.Title,
+						Author: pr.Author,
+						URL:    pr.URL,
+					})
+				}
 			}
-		}
 
-		// Fetch PRs (requires pull-requests: read permission in workflow)
-		if pipeline.TrackPRs && previousTag != "" {
-			prs, _ := h.client.GetMergedPRsBetween(ctx, previousTag, "HEAD")
-			for _, pr := range prs {
-				data.State.PRs = append(data.State.PRs, PRInfo{
-					Number: pr.Number,
-					Title:  pr.Title,
-					Author: pr.Author,
-					URL:    pr.URL,
-				})
-			}
-		}
-
-		// Fetch commits
-		if pipeline.TrackCommits && previousTag != "" {
-			commits, err := h.client.GetCommitsSinceTag(ctx, previousTag, "")
-			if err == nil {
-				for _, c := range commits {
+			// Convert commits to state format
+			if pipeline.TrackCommits {
+				for _, c := range contents.Commits {
 					data.State.Commits = append(data.State.Commits, CommitInfo{
 						SHA:     c.SHA,
 						Message: c.Message,
@@ -261,8 +266,11 @@ func (h *Handler) generatePipelineIssueBody(ctx context.Context, data *TemplateD
 						URL:     c.URL,
 					})
 				}
-				data.CommitsCount = len(commits)
+				data.CommitsCount = len(contents.Commits)
 			}
+
+			// Store release identifier for display
+			data.State.ReleaseIdentifier = contents.Identifier
 		}
 	}
 
@@ -591,6 +599,55 @@ func (h *Handler) processPipelineComment(
 		if pipelineResult.Complete {
 			output.Status = "approved"
 
+			// Handle release strategy cleanup and auto-creation
+			if pipeline.ReleaseStrategy.GetType() != "" && pipeline.ReleaseStrategy.GetType() != config.StrategyTag {
+				tracker := NewReleaseTracker(h.client, pipeline.ReleaseStrategy, state.Version)
+
+				// Cleanup current release (close milestone, remove labels, delete branch)
+				var prs []github.PullRequest
+				for _, pr := range state.PRs {
+					prs = append(prs, github.PullRequest{
+						Number: pr.Number,
+						Title:  pr.Title,
+						Author: pr.Author,
+						URL:    pr.URL,
+					})
+				}
+				_ = tracker.CleanupCurrentRelease(ctx, prs)
+
+				// Auto-create next release artifact if configured
+				if pipeline.ReleaseStrategy.IsAutoCreateEnabled() {
+					nextVersion := calculateNextVersion(state.Version, pipeline.ReleaseStrategy.GetNextVersionStrategy())
+					if nextVersion != "" {
+						if err := tracker.CreateNextReleaseArtifact(ctx, nextVersion); err == nil {
+							// Post comment about next release creation
+							comment := pipeline.ReleaseStrategy.AutoCreate.Comment
+							if comment == "" {
+								comment = fmt.Sprintf("🚀 **Next release prepared:** %s\n\n", nextVersion)
+								switch pipeline.ReleaseStrategy.GetType() {
+								case config.StrategyBranch:
+									comment += fmt.Sprintf("Created release branch: `%s`", pipeline.ReleaseStrategy.FormatBranchName(nextVersion))
+								case config.StrategyLabel:
+									comment += fmt.Sprintf("Created release label: `%s`", pipeline.ReleaseStrategy.FormatLabelName(nextVersion))
+								case config.StrategyMilestone:
+									comment += fmt.Sprintf("Created milestone: `%s`", pipeline.ReleaseStrategy.FormatMilestoneName(nextVersion))
+								}
+							}
+							_ = h.client.CreateComment(ctx, input.IssueNumber, comment)
+
+							// Optionally create a new approval issue for next release
+							if pipeline.ReleaseStrategy.AutoCreate.CreateIssue {
+								// Create new request for next version
+								_, _ = h.Request(ctx, RequestInput{
+									Workflow: state.Workflow,
+									Version:  nextVersion,
+								})
+							}
+						}
+					}
+				}
+			}
+
 			// Post final completion comment
 			if workflow.OnApproved.Comment != "" {
 				comment := ReplaceTemplateVars(workflow.OnApproved.Comment, map[string]string{
@@ -905,4 +962,18 @@ func (h *Handler) CloseIssue(ctx context.Context, input CloseIssueInput) (*Close
 	}
 
 	return output, nil
+}
+
+// calculateNextVersion calculates the next version based on the current version and strategy.
+func calculateNextVersion(currentVersion, strategy string) string {
+	if currentVersion == "" {
+		return ""
+	}
+
+	// Use the semver package for proper version incrementing
+	nextVersion, err := semver.NextVersion(currentVersion, strategy)
+	if err != nil {
+		return ""
+	}
+	return nextVersion
 }

@@ -36,6 +36,7 @@ Enterprise-grade GitHub Action for policy-based approval workflows with per-grou
   - [Approval Keywords](#approval-keywords)
   - [Team Support](#team-support)
   - [Progressive Deployment Pipelines](#progressive-deployment-pipelines)
+  - [Release Candidate Strategies](#release-candidate-strategies)
   - [Jira Integration](#jira-integration)
   - [Deployment Tracking](#deployment-tracking)
   - [External Config Repository](#external-config-repository)
@@ -784,6 +785,247 @@ jobs:
 | `compare_from_tag` | Custom tag pattern to compare from |
 
 **Note:** PR tracking requires `pull-requests: read` permission in your workflow.
+
+### Release Candidate Strategies
+
+In enterprise environments, PRs merged to main aren't always immediate release candidates. The approval engine supports three strategies for selecting which PRs belong to a release:
+
+#### Strategy Types
+
+| Strategy | Description | Use Case |
+|----------|-------------|----------|
+| `tag` | PRs between two git tags (default) | Simple releases, trunk-based development |
+| `branch` | PRs merged to a release branch | GitFlow, release branches |
+| `label` | PRs with a specific release label | Flexible selection, batched releases |
+| `milestone` | PRs assigned to a GitHub milestone | Roadmap-aligned releases |
+
+#### Configuration
+
+```yaml
+# .github/approvals.yml
+workflows:
+  deploy:
+    description: "Production deployment pipeline"
+    pipeline:
+      track_prs: true
+      track_commits: true
+
+      # Configure release selection strategy
+      release_strategy:
+        type: milestone  # or: tag, branch, label
+
+        # Milestone strategy settings
+        milestone:
+          pattern: "v{{version}}"        # e.g., "v1.2.0"
+          close_after_release: true       # Close milestone on prod completion
+
+        # Auto-create next release artifact on completion
+        auto_create:
+          enabled: true
+          next_version: patch             # or: minor, major
+          create_issue: true              # Create new approval issue
+
+      stages:
+        - name: dev
+          policy: developers
+        - name: prod
+          policy: production-approvers
+          is_final: true
+```
+
+#### Branch Strategy
+
+Use release branches for GitFlow-style development:
+
+```yaml
+release_strategy:
+  type: branch
+  branch:
+    pattern: "release/{{version}}"  # Creates release/v1.2.0
+    base_branch: main               # Compare against main
+    delete_after_release: true      # Cleanup after prod deploy
+
+  auto_create:
+    enabled: true
+    next_version: minor
+```
+
+**How it works:**
+1. Create a release branch: `release/v1.2.0`
+2. PRs merged to the branch are release candidates
+3. Request approval for that version
+4. Approval issue shows all PRs in the release branch
+5. After prod, branch is deleted (optional) and next branch is created
+
+#### Label Strategy
+
+Use labels for flexible PR selection:
+
+```yaml
+release_strategy:
+  type: label
+  label:
+    pattern: "release:{{version}}"      # e.g., "release:v1.2.0"
+    pending_label: "pending-release"    # Applied to merged PRs awaiting release
+    remove_after_release: true          # Remove label after prod deploy
+
+  auto_create:
+    enabled: true
+    next_version: patch
+```
+
+**How it works:**
+1. PRs merged to main get the `pending-release` label
+2. Release manager applies `release:v1.2.0` to selected PRs
+3. Request approval for v1.2.0
+4. Approval issue shows only PRs with that label
+5. After prod, labels are removed and next release label is created
+
+#### Milestone Strategy
+
+Use milestones for roadmap-aligned releases:
+
+```yaml
+release_strategy:
+  type: milestone
+  milestone:
+    pattern: "Release {{version}}"       # e.g., "Release 1.2.0"
+    close_after_release: true            # Close milestone on completion
+
+  auto_create:
+    enabled: true
+    next_version: minor
+    create_issue: true                   # Auto-create next approval issue
+```
+
+**How it works:**
+1. Create milestone: "Release 1.2.0"
+2. Assign PRs to the milestone during development
+3. Request approval for v1.2.0
+4. Approval issue shows all PRs in the milestone
+5. After prod, milestone is closed and next milestone is created
+
+#### Auto-Creation on Completion
+
+When the final stage (prod) is approved, automatically prepare for the next release:
+
+```yaml
+auto_create:
+  enabled: true
+  next_version: patch      # Calculate next: patch, minor, or major
+  create_issue: true       # Create new approval issue immediately
+  comment: |               # Custom message (optional)
+    🚀 **Next release prepared:** {{version}}
+```
+
+This creates:
+- **Branch strategy:** New release branch from main
+- **Label strategy:** New release label
+- **Milestone strategy:** New milestone
+
+#### Cleanup Options
+
+Each strategy has optional cleanup actions that run when the final stage (prod) is approved. **All cleanup options default to `false`** - cleanup is opt-in:
+
+| Strategy | Cleanup Option | Description |
+|----------|----------------|-------------|
+| Branch | `delete_after_release` | Delete the release branch |
+| Label | `remove_after_release` | Remove release labels from PRs |
+| Milestone | `close_after_release` | Close the milestone |
+
+```yaml
+release_strategy:
+  type: branch
+  branch:
+    pattern: "release/{{version}}"
+    delete_after_release: false   # Keep branch for reference (default)
+
+  type: milestone
+  milestone:
+    pattern: "v{{version}}"
+    close_after_release: true     # Close milestone when done
+```
+
+#### Hotfix Deployments
+
+For emergency hotfixes that need to bypass normal release workflows, create a separate workflow:
+
+```yaml
+# .github/approvals.yml
+workflows:
+  # Standard releases - full pipeline with milestone tracking
+  deploy:
+    description: "Standard release pipeline (dev → qa → stage → prod)"
+    pipeline:
+      release_strategy:
+        type: milestone
+        milestone:
+          pattern: "v{{version}}"
+          close_after_release: true
+        auto_create:
+          enabled: true
+          next_version: minor
+      stages:
+        - name: dev
+          policy: developers
+        - name: qa
+          policy: qa-team
+        - name: stage
+          policy: tech-leads
+        - name: prod
+          policy: production-approvers
+          is_final: true
+
+  # Hotfixes - skip stages, direct to prod
+  hotfix:
+    description: "Emergency hotfix - direct to production"
+    pipeline:
+      release_strategy:
+        type: tag              # Simple tag-based, no cleanup needed
+        # No auto_create - hotfixes are one-off
+      stages:
+        - name: prod
+          policy: production-approvers
+          create_tag: true
+          is_final: true
+    on_approved:
+      close_issue: true
+      comment: "🚨 Hotfix {{version}} deployed to production"
+```
+
+**Trigger hotfix vs regular release:**
+
+```bash
+# Regular release - goes through all stages
+gh workflow run request-approval.yml -f workflow_name=deploy -f version=v1.3.0
+
+# Hotfix - goes straight to prod
+gh workflow run request-approval.yml -f workflow_name=hotfix -f version=v1.2.1
+```
+
+**Hotfix patterns:**
+
+| Scenario | Strategy | Cleanup | Auto-Create |
+|----------|----------|---------|-------------|
+| Emergency fix | `tag` | None | Disabled |
+| Patch release | `milestone` | `close_after_release: false` | Disabled |
+| Multiple hotfixes | `branch` | `delete_after_release: false` | Disabled |
+
+#### Release Strategy Benefits
+
+| Strategy | Pros | Cons |
+|----------|------|------|
+| **Tag** | Simple, no extra workflow | All merged PRs included |
+| **Branch** | Clear release scope, isolation | Branch management overhead |
+| **Label** | Flexible selection, easy to change | Manual labeling required |
+| **Milestone** | Roadmap visibility, planning integration | Requires milestone discipline |
+
+**Recommendation:**
+
+- Use **tag** for simple projects with continuous deployment
+- Use **branch** for regulated environments needing release isolation
+- Use **label** for batched releases with flexible scope
+- Use **milestone** for roadmap-driven development with clear release planning
 
 ### Jira Integration
 

@@ -35,6 +35,10 @@ type IssueState struct {
 	StageHistory  []StageCompletion `json:"stage_history,omitempty"`  // History of completed stages
 	PRs           []PRInfo          `json:"prs,omitempty"`            // PRs included in this release
 	Commits       []CommitInfo      `json:"commits,omitempty"`        // Commits included in this release
+
+	// Release strategy fields
+	ReleaseStrategy   string `json:"release_strategy,omitempty"`   // Strategy used: "tag", "branch", "label", "milestone"
+	ReleaseIdentifier string `json:"release_identifier,omitempty"` // e.g., branch name, label, milestone title
 }
 
 // StageCompletion records when a stage was completed.

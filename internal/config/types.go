@@ -106,6 +106,10 @@ type PipelineConfig struct {
 	TrackPRs       bool            `yaml:"track_prs,omitempty"`        // Include PRs in release tracking
 	TrackCommits   bool            `yaml:"track_commits,omitempty"`    // Include commits in release tracking
 	CompareFromTag string          `yaml:"compare_from_tag,omitempty"` // Tag pattern to compare from (e.g., "v*")
+
+	// ReleaseStrategy defines how release candidates are selected.
+	// Supports: "tag" (default), "branch", "label", "milestone"
+	ReleaseStrategy ReleaseStrategyConfig `yaml:"release_strategy,omitempty"`
 }
 
 // PipelineStage defines a single stage in a deployment pipeline.
