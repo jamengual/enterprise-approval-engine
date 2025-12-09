@@ -156,7 +156,13 @@ func (h *Handler) Request(ctx context.Context, input RequestInput) (*RequestOutp
 		},
 	}
 
-	body, err := GenerateIssueBodyFromConfig(templateData, &workflow.Issue)
+	// For pipeline workflows, fetch PR/commit tracking data
+	var body string
+	if workflow.IsPipeline() {
+		body, err = h.generatePipelineIssueBody(ctx, &templateData, workflow)
+	} else {
+		body, err = GenerateIssueBodyFromConfig(templateData, &workflow.Issue)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -193,6 +199,77 @@ func (h *Handler) Request(ctx context.Context, input RequestInput) (*RequestOutp
 		IssueNumber: issue.Number,
 		IssueURL:    issue.HTMLURL,
 	}, nil
+}
+
+// generatePipelineIssueBody creates an issue body for pipeline workflows with PR/commit tracking.
+func (h *Handler) generatePipelineIssueBody(ctx context.Context, data *TemplateData, workflow *config.Workflow) (string, error) {
+	pipeline := workflow.Pipeline
+
+	// Initialize pipeline state
+	var stageNames []string
+	for _, stage := range pipeline.Stages {
+		stageNames = append(stageNames, stage.Name)
+	}
+	data.State.Pipeline = stageNames
+	data.State.CurrentStage = 0
+
+	// Fetch PR and commit data if tracking is enabled
+	if pipeline.TrackPRs || pipeline.TrackCommits {
+		// Try to find previous tag to compare from
+		previousTag := ""
+		if data.Version != "" {
+			prevTag, err := h.client.GetPreviousTag(ctx, data.Version)
+			if err == nil && prevTag != "" {
+				previousTag = prevTag
+				data.State.PreviousTag = previousTag
+				data.PreviousVersion = previousTag
+			}
+		}
+
+		// If no previous tag from version, try to get latest tag
+		if previousTag == "" {
+			tags, err := h.client.ListTags(ctx, 1)
+			if err == nil && len(tags) > 0 {
+				previousTag = tags[0]
+				data.State.PreviousTag = previousTag
+				data.PreviousVersion = previousTag
+			}
+		}
+
+		// Fetch PRs
+		if pipeline.TrackPRs && previousTag != "" {
+			prs, err := h.client.GetMergedPRsBetween(ctx, previousTag, "HEAD")
+			if err == nil {
+				for _, pr := range prs {
+					data.State.PRs = append(data.State.PRs, PRInfo{
+						Number: pr.Number,
+						Title:  pr.Title,
+						Author: pr.Author,
+						URL:    pr.URL,
+					})
+				}
+			}
+		}
+
+		// Fetch commits
+		if pipeline.TrackCommits && previousTag != "" {
+			commits, err := h.client.GetCommitsSinceTag(ctx, previousTag, "")
+			if err == nil {
+				for _, c := range commits {
+					data.State.Commits = append(data.State.Commits, CommitInfo{
+						SHA:     c.SHA,
+						Message: c.Message,
+						Author:  c.Author,
+						URL:     c.URL,
+					})
+				}
+				data.CommitsCount = len(commits)
+			}
+		}
+	}
+
+	// Generate the pipeline-specific issue body
+	return GeneratePipelineIssueBody(data, &data.State, pipeline), nil
 }
 
 // CheckInput contains inputs for the check action.
@@ -297,6 +374,11 @@ func (h *Handler) ProcessComment(ctx context.Context, input ProcessCommentInput)
 	workflow, err := h.config.GetWorkflow(state.Workflow)
 	if err != nil {
 		return nil, err
+	}
+
+	// Check if this is a pipeline workflow
+	if workflow.IsPipeline() {
+		return h.processPipelineComment(ctx, input, issue, state, workflow)
 	}
 
 	// Create team resolver
@@ -430,6 +512,173 @@ func (h *Handler) ProcessComment(ctx context.Context, input ProcessCommentInput)
 	}
 
 	return output, nil
+}
+
+// processPipelineComment handles approval comments for pipeline workflows.
+func (h *Handler) processPipelineComment(
+	ctx context.Context,
+	input ProcessCommentInput,
+	issue *github.Issue,
+	state *IssueState,
+	workflow *config.Workflow,
+) (*ProcessCommentOutput, error) {
+	pipeline := workflow.Pipeline
+
+	// Check if pipeline is already complete
+	if state.CurrentStage >= len(pipeline.Stages) {
+		return &ProcessCommentOutput{
+			Status: "approved",
+		}, nil
+	}
+
+	// Create pipeline processor
+	processor := NewPipelineProcessor(h)
+
+	// Get all comments and evaluate current stage
+	comments, err := h.client.ListComments(ctx, input.IssueNumber)
+	if err != nil {
+		return nil, err
+	}
+
+	result, err := processor.EvaluatePipelineStage(ctx, state, workflow, convertComments(comments))
+	if err != nil {
+		return nil, err
+	}
+
+	output := &ProcessCommentOutput{
+		Status:    string(result.Status),
+		Approvers: extractApprovers(result.Approvals),
+		Denier:    result.Denier,
+	}
+
+	// If current stage is approved, advance the pipeline
+	if result.Status == approval.StatusApproved {
+		// Get the latest approver from the comments
+		latestApprover := input.CommentUser
+
+		// Process the stage approval
+		pipelineResult, err := processor.ProcessPipelineApproval(ctx, state, workflow, latestApprover)
+		if err != nil {
+			return nil, err
+		}
+
+		// Post stage completion comment
+		if pipelineResult.StageMessage != "" {
+			_ = h.client.CreateComment(ctx, input.IssueNumber, pipelineResult.StageMessage)
+		}
+
+		// Create tag if this stage requires it
+		if pipelineResult.CreateTag && state.Version != "" {
+			tagName := state.Version
+			exists, err := h.client.TagExists(ctx, tagName)
+			if err == nil && !exists {
+				_, tagErr := h.client.CreateTag(ctx, github.CreateTagOptions{
+					Name:    tagName,
+					Message: fmt.Sprintf("Release %s - approved via IssueOps pipeline", tagName),
+				})
+				if tagErr == nil {
+					output.Tag = tagName
+					state.Tag = tagName
+				}
+			}
+		}
+
+		// Update issue body with new state and progress table
+		updatedBody := regeneratePipelineIssueBody(issue.Body, state, pipeline)
+		if updatedBody != "" {
+			_ = h.client.UpdateIssueBody(ctx, input.IssueNumber, updatedBody)
+		}
+
+		// Check if pipeline is complete
+		if pipelineResult.Complete {
+			output.Status = "approved"
+
+			// Post final completion comment
+			if workflow.OnApproved.Comment != "" {
+				comment := ReplaceTemplateVars(workflow.OnApproved.Comment, map[string]string{
+					"version": state.Version,
+				})
+				_ = h.client.CreateComment(ctx, input.IssueNumber, comment)
+			}
+
+			// Close issue if configured
+			if workflow.OnApproved.CloseIssue {
+				_ = h.client.CloseIssue(ctx, input.IssueNumber)
+			}
+		} else {
+			// Pipeline continues - notify about next stage
+			output.Status = "pending"
+			output.SatisfiedGroup = pipelineResult.StageName
+
+			if pipelineResult.NextStage != "" {
+				nextStageComment := fmt.Sprintf("⏳ **Next stage:** %s\n\n**Awaiting approval from:** %s",
+					strings.ToUpper(pipelineResult.NextStage),
+					formatApproversList(pipelineResult.NextApprovers))
+				_ = h.client.CreateComment(ctx, input.IssueNumber, nextStageComment)
+			}
+		}
+	}
+
+	// Handle denial
+	if result.Status == approval.StatusDenied {
+		if workflow.OnDenied.Comment != "" {
+			comment := ReplaceTemplateVars(workflow.OnDenied.Comment, map[string]string{
+				"denier": result.Denier,
+			})
+			_ = h.client.CreateComment(ctx, input.IssueNumber, comment)
+		}
+
+		if workflow.OnDenied.CloseIssue {
+			_ = h.client.CloseIssue(ctx, input.IssueNumber)
+		}
+	}
+
+	return output, nil
+}
+
+// regeneratePipelineIssueBody updates the issue body with current pipeline state.
+func regeneratePipelineIssueBody(originalBody string, state *IssueState, pipeline *config.PipelineConfig) string {
+	// Update the state in the body
+	updatedBody, err := UpdateIssueState(originalBody, *state)
+	if err != nil {
+		return ""
+	}
+
+	// Also update the pipeline progress table in the visible part of the body
+	// Look for the existing table and replace it
+	newTable := GeneratePipelineTable(state, pipeline)
+
+	// Find and replace the pipeline table section
+	tableStart := strings.Index(updatedBody, "| Stage | Status | Approver | Time |")
+	if tableStart != -1 {
+		// Find the end of the table (next section or state marker)
+		tableEnd := strings.Index(updatedBody[tableStart:], "\n\n")
+		if tableEnd == -1 {
+			tableEnd = strings.Index(updatedBody[tableStart:], "<!-- issueops-state:")
+		}
+		if tableEnd != -1 {
+			updatedBody = updatedBody[:tableStart] + newTable + updatedBody[tableStart+tableEnd:]
+		}
+	}
+
+	return updatedBody
+}
+
+// formatApproversList formats a list of approvers for display.
+func formatApproversList(approvers []string) string {
+	if len(approvers) == 0 {
+		return "_configured approvers_"
+	}
+
+	var formatted []string
+	for _, a := range approvers {
+		if config.IsTeam(a) {
+			formatted = append(formatted, fmt.Sprintf("@%s (team)", config.ParseTeam(a)))
+		} else {
+			formatted = append(formatted, "@"+a)
+		}
+	}
+	return strings.Join(formatted, ", ")
 }
 
 // githubTeamResolver implements approval.TeamResolver using the GitHub client.

@@ -28,6 +28,36 @@ type IssueState struct {
 	Environment  string   `json:"environment,omitempty"`   // Target environment
 	JiraIssues   []string `json:"jira_issues,omitempty"`   // Jira issue keys in this release
 	PreviousTag  string   `json:"previous_tag,omitempty"`  // Previous tag for comparison
+
+	// Progressive deployment fields
+	Pipeline      []string          `json:"pipeline,omitempty"`       // Ordered list of environments: ["dev", "qa", "stage", "prod"]
+	CurrentStage  int               `json:"current_stage,omitempty"`  // Index of current stage in pipeline (0-based)
+	StageHistory  []StageCompletion `json:"stage_history,omitempty"`  // History of completed stages
+	PRs           []PRInfo          `json:"prs,omitempty"`            // PRs included in this release
+	Commits       []CommitInfo      `json:"commits,omitempty"`        // Commits included in this release
+}
+
+// StageCompletion records when a stage was completed.
+type StageCompletion struct {
+	Stage      string `json:"stage"`
+	ApprovedBy string `json:"approved_by"`
+	ApprovedAt string `json:"approved_at"`
+}
+
+// PRInfo contains information about a PR included in the release.
+type PRInfo struct {
+	Number int    `json:"number"`
+	Title  string `json:"title"`
+	Author string `json:"author"`
+	URL    string `json:"url"`
+}
+
+// CommitInfo contains information about a commit included in the release.
+type CommitInfo struct {
+	SHA     string `json:"sha"`
+	Message string `json:"message"`
+	Author  string `json:"author"`
+	URL     string `json:"url"`
 }
 
 // TemplateData contains data for issue body templates.

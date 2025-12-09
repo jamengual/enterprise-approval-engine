@@ -95,6 +95,33 @@ type Workflow struct {
 	OnApproved  ActionConfig      `yaml:"on_approved,omitempty"`
 	OnDenied    ActionConfig      `yaml:"on_denied,omitempty"`
 	OnClosed    OnClosedConfig    `yaml:"on_closed,omitempty"` // Actions when issue is manually closed
+
+	// Progressive deployment pipeline
+	Pipeline *PipelineConfig `yaml:"pipeline,omitempty"` // Multi-stage deployment pipeline
+}
+
+// PipelineConfig defines a progressive deployment pipeline.
+type PipelineConfig struct {
+	Stages         []PipelineStage `yaml:"stages"`                     // Ordered list of deployment stages
+	TrackPRs       bool            `yaml:"track_prs,omitempty"`        // Include PRs in release tracking
+	TrackCommits   bool            `yaml:"track_commits,omitempty"`    // Include commits in release tracking
+	CompareFromTag string          `yaml:"compare_from_tag,omitempty"` // Tag pattern to compare from (e.g., "v*")
+}
+
+// PipelineStage defines a single stage in a deployment pipeline.
+type PipelineStage struct {
+	Name        string   `yaml:"name"`                   // Stage name (e.g., "dev", "qa", "prod")
+	Environment string   `yaml:"environment,omitempty"`  // GitHub environment name
+	Policy      string   `yaml:"policy,omitempty"`       // Policy for this stage
+	Approvers   []string `yaml:"approvers,omitempty"`    // Inline approvers (alternative to policy)
+	OnApproved  string   `yaml:"on_approved,omitempty"`  // Comment to post when stage is approved
+	CreateTag   bool     `yaml:"create_tag,omitempty"`   // Create tag at this stage
+	IsFinal     bool     `yaml:"is_final,omitempty"`     // If true, close issue after this stage
+}
+
+// IsPipeline returns true if this workflow uses a progressive pipeline.
+func (w *Workflow) IsPipeline() bool {
+	return w.Pipeline != nil && len(w.Pipeline.Stages) > 0
 }
 
 // Requirement defines one approval path. Multiple requirements form OR logic.

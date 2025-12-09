@@ -120,3 +120,103 @@ func (c *Client) GetPreviousTag(ctx context.Context, currentTag string) (string,
 
 	return "", fmt.Errorf("tag %s not found", currentTag)
 }
+
+// PullRequest represents a GitHub pull request.
+type PullRequest struct {
+	Number    int    `json:"number"`
+	Title     string `json:"title"`
+	Author    string `json:"author"`
+	URL       string `json:"url"`
+	MergedAt  string `json:"merged_at,omitempty"`
+	MergeSHA  string `json:"merge_sha,omitempty"`
+}
+
+// GetMergedPRsBetween returns PRs merged between two refs.
+func (c *Client) GetMergedPRsBetween(ctx context.Context, base, head string) ([]PullRequest, error) {
+	// Get commits between the refs
+	commits, err := c.CompareCommits(ctx, base, head)
+	if err != nil {
+		return nil, err
+	}
+
+	// Extract PR numbers from commit messages (looking for "Merge pull request #X" or "(#X)")
+	prNumbers := make(map[int]bool)
+	for _, commit := range commits {
+		// Check for "Merge pull request #123"
+		if n := extractPRNumber(commit.Message); n > 0 {
+			prNumbers[n] = true
+		}
+	}
+
+	// Fetch PR details
+	var prs []PullRequest
+	for prNum := range prNumbers {
+		pr, _, err := c.client.PullRequests.Get(ctx, c.owner, c.repo, prNum)
+		if err != nil {
+			continue // Skip if we can't fetch the PR
+		}
+
+		author := ""
+		if pr.User != nil {
+			author = pr.User.GetLogin()
+		}
+
+		mergedAt := ""
+		if pr.MergedAt != nil {
+			mergedAt = pr.MergedAt.String()
+		}
+
+		prs = append(prs, PullRequest{
+			Number:   pr.GetNumber(),
+			Title:    pr.GetTitle(),
+			Author:   author,
+			URL:      pr.GetHTMLURL(),
+			MergedAt: mergedAt,
+			MergeSHA: pr.GetMergeCommitSHA(),
+		})
+	}
+
+	return prs, nil
+}
+
+// extractPRNumber extracts a PR number from a commit message.
+func extractPRNumber(message string) int {
+	// Look for "Merge pull request #123" or "(#123)" patterns
+	patterns := []string{
+		"Merge pull request #",
+		"(#",
+	}
+
+	for _, pattern := range patterns {
+		idx := findIndex(message, pattern)
+		if idx == -1 {
+			continue
+		}
+
+		numStart := idx + len(pattern)
+		numEnd := numStart
+		for numEnd < len(message) && message[numEnd] >= '0' && message[numEnd] <= '9' {
+			numEnd++
+		}
+
+		if numEnd > numStart {
+			num := 0
+			for i := numStart; i < numEnd; i++ {
+				num = num*10 + int(message[i]-'0')
+			}
+			return num
+		}
+	}
+
+	return 0
+}
+
+// findIndex finds the index of a substring in a string.
+func findIndex(s, substr string) int {
+	for i := 0; i+len(substr) <= len(s); i++ {
+		if s[i:i+len(substr)] == substr {
+			return i
+		}
+	}
+	return -1
+}

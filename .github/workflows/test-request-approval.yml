@@ -11,14 +11,15 @@ on:
       workflow_name:
         description: 'Environment/Workflow to deploy'
         required: true
-        default: 'deploy-dev'
+        default: 'deploy'
         type: choice
         options:
-          - deploy-dev
-          - deploy-qa
-          - deploy-stage
-          - deploy-prod
-          - release
+          - deploy        # Progressive pipeline (dev → qa → stage → prod)
+          - deploy-dev    # Individual: DEV only
+          - deploy-qa     # Individual: QA only
+          - deploy-stage  # Individual: STAGING only
+          - deploy-prod   # Individual: PRODUCTION only
+          - release       # Release approval
 
 permissions:
   contents: write
