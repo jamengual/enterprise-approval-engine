@@ -377,3 +377,236 @@ require (
 - Clear documentation on App requirements
 - Graceful fallback for individual users
 - Explicit error when team lookup fails
+
+---
+
+## Stage 11: Progressive Deployment Pipelines
+**Goal**: Single-issue tracking through multiple environments (dev → qa → stage → prod)
+**Success Criteria**:
+- Single issue tracks deployment through all stages
+- Each stage has its own approval policy
+- Progress table updates as stages are approved
+- PR and commit tracking shows what's being deployed
+- Tags created at configured stages
+
+**Tests**:
+- Pipeline issue created with all stages pending
+- Approve stage 1 → advances to stage 2
+- Progress table updates correctly
+- PR tracking populates from git history
+- Final stage closes issue
+
+**Status**: Complete
+
+### Implementation
+
+#### Files Created/Modified:
+- `internal/action/pipeline.go` - Pipeline processor for stage management
+- `internal/action/pipeline_template.go` - Pipeline-specific issue body generation
+- `internal/github/commits.go` - Git comparison and PR extraction APIs
+
+#### Key Types:
+```go
+// PipelineConfig in config/types.go
+type PipelineConfig struct {
+    Stages         []PipelineStage
+    TrackPRs       bool
+    TrackCommits   bool
+    CompareFromTag string
+    ReleaseStrategy ReleaseStrategyConfig
+}
+
+type PipelineStage struct {
+    Name        string
+    Environment string
+    Policy      string
+    Approvers   []string
+    OnApproved  string
+    CreateTag   bool
+    IsFinal     bool
+}
+```
+
+#### Key Functions:
+- `PipelineProcessor.EvaluatePipelineStage()` - Evaluates current stage approval
+- `PipelineProcessor.ProcessPipelineApproval()` - Advances pipeline on approval
+- `GeneratePipelineIssueBody()` - Creates progress table with PR/commit tracking
+- `Client.GetMergedPRsBetween()` - Fetches PRs between two refs
+- `Client.CompareCommits()` - Gets commits between refs
+
+#### Configuration Example:
+```yaml
+workflows:
+  deploy:
+    pipeline:
+      track_prs: true
+      track_commits: true
+      stages:
+        - name: dev
+          policy: developers
+          on_approved: "✅ DEV approved!"
+        - name: qa
+          policy: qa-team
+        - name: prod
+          policy: production-approvers
+          create_tag: true
+          is_final: true
+```
+
+#### Workflow Requirements:
+- `pull-requests: read` permission for PR tracking
+- `contents: write` for tag creation
+- `issues: write` for issue management
+
+---
+
+## Stage 12: Release Candidate Strategies
+**Goal**: Support multiple strategies for selecting which PRs belong to a release
+**Success Criteria**:
+- Four strategies: tag, branch, label, milestone
+- Auto-creation of next release artifact on completion
+- Optional cleanup (close milestone, remove labels, delete branch)
+- Hotfix workflow support (bypass stages)
+
+**Tests**:
+- Tag strategy: PRs between v1.0 and v2.0
+- Branch strategy: PRs merged to release/v1.2.0
+- Label strategy: PRs with release:v1.2.0 label
+- Milestone strategy: PRs in v1.2.0 milestone
+- Auto-create next milestone on completion
+
+**Status**: Complete
+
+### Implementation
+
+#### Files Created:
+- `internal/config/release_strategy.go` - Strategy configuration types
+- `internal/github/releases.go` - GitHub API for milestones, labels, branches
+- `internal/action/release_tracker.go` - Strategy-aware PR/commit fetcher
+
+#### Key Types:
+```go
+// ReleaseStrategyType enum
+const (
+    StrategyTag       ReleaseStrategyType = "tag"
+    StrategyBranch    ReleaseStrategyType = "branch"
+    StrategyLabel     ReleaseStrategyType = "label"
+    StrategyMilestone ReleaseStrategyType = "milestone"
+)
+
+// ReleaseStrategyConfig in config/release_strategy.go
+type ReleaseStrategyConfig struct {
+    Type      ReleaseStrategyType
+    Branch    BranchStrategyConfig
+    Label     LabelStrategyConfig
+    Milestone MilestoneStrategyConfig
+    AutoCreate AutoCreateConfig
+}
+
+type AutoCreateConfig struct {
+    Enabled     bool
+    NextVersion string   // "patch", "minor", "major"
+    CreateIssue bool
+    Comment     string
+}
+```
+
+#### Key Functions:
+```go
+// ReleaseTracker methods
+func (r *ReleaseTracker) GetReleaseContents(ctx, previousTag) (*ReleaseContents, error)
+func (r *ReleaseTracker) CreateNextReleaseArtifact(ctx, nextVersion) error
+func (r *ReleaseTracker) CleanupCurrentRelease(ctx, prs) error
+
+// GitHub client methods
+func (c *Client) GetPRsByMilestone(ctx, milestoneNumber) ([]PullRequest, error)
+func (c *Client) GetPRsByLabel(ctx, label) ([]PullRequest, error)
+func (c *Client) GetPRsMergedToBranch(ctx, branchName) ([]PullRequest, error)
+func (c *Client) CreateMilestone(ctx, title, description) (*Milestone, error)
+func (c *Client) CreateBranch(ctx, branchName, sourceRef) (*Branch, error)
+func (c *Client) CreateLabel(ctx, name, color, description) error
+```
+
+#### Configuration Examples:
+
+**Milestone Strategy:**
+```yaml
+pipeline:
+  release_strategy:
+    type: milestone
+    milestone:
+      pattern: "v{{version}}"
+      close_after_release: true
+    auto_create:
+      enabled: true
+      next_version: minor
+      create_issue: true
+```
+
+**Branch Strategy:**
+```yaml
+pipeline:
+  release_strategy:
+    type: branch
+    branch:
+      pattern: "release/{{version}}"
+      base_branch: main
+      delete_after_release: false
+```
+
+**Label Strategy:**
+```yaml
+pipeline:
+  release_strategy:
+    type: label
+    label:
+      pattern: "release:{{version}}"
+      pending_label: "pending-release"
+      remove_after_release: true
+```
+
+**Hotfix Workflow (separate workflow, tag strategy):**
+```yaml
+workflows:
+  hotfix:
+    description: "Emergency hotfix - direct to prod"
+    pipeline:
+      release_strategy:
+        type: tag   # No cleanup, no auto-create
+      stages:
+        - name: prod
+          policy: production-approvers
+          create_tag: true
+          is_final: true
+```
+
+#### Cleanup Options (all default to false):
+| Strategy | Option | Description |
+|----------|--------|-------------|
+| Branch | `delete_after_release` | Delete release branch |
+| Label | `remove_after_release` | Remove labels from PRs |
+| Milestone | `close_after_release` | Close the milestone |
+
+#### Auto-Creation Flow:
+1. Final stage (prod) approved
+2. Calculate next version (patch/minor/major)
+3. Create next artifact (branch/label/milestone)
+4. Optionally create new approval issue
+5. Post comment about next release
+
+---
+
+## Future Enhancements
+
+### Planned Features
+- **Slack/Teams Integration**: Notify channels on approval requests
+- **Scheduled Releases**: Time-based release windows
+- **Rollback Workflows**: One-click rollback with approval
+- **Metrics Dashboard**: Approval cycle time, bottleneck analysis
+- **Multi-Repo Releases**: Coordinate releases across repositories
+
+### API Extensions
+- Webhook support for external integrations
+- REST API for programmatic access
+- GraphQL queries for complex status checks
+
