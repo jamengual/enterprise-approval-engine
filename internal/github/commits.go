@@ -136,7 +136,7 @@ func (c *Client) GetMergedPRsBetween(ctx context.Context, base, head string) ([]
 	// Get commits between the refs
 	commits, err := c.CompareCommits(ctx, base, head)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to compare commits: %w", err)
 	}
 
 	// Extract PR numbers from commit messages (looking for "Merge pull request #X" or "(#X)")
@@ -148,11 +148,14 @@ func (c *Client) GetMergedPRsBetween(ctx context.Context, base, head string) ([]
 		}
 	}
 
+	fmt.Printf("Debug: Found %d commits, extracted %d PR numbers: %v\n", len(commits), len(prNumbers), prNumbers)
+
 	// Fetch PR details
 	var prs []PullRequest
 	for prNum := range prNumbers {
 		pr, _, err := c.client.PullRequests.Get(ctx, c.owner, c.repo, prNum)
 		if err != nil {
+			fmt.Printf("Debug: Failed to fetch PR #%d: %v\n", prNum, err)
 			continue // Skip if we can't fetch the PR
 		}
 

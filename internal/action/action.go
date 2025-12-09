@@ -239,15 +239,17 @@ func (h *Handler) generatePipelineIssueBody(ctx context.Context, data *TemplateD
 		// Fetch PRs
 		if pipeline.TrackPRs && previousTag != "" {
 			prs, err := h.client.GetMergedPRsBetween(ctx, previousTag, "HEAD")
-			if err == nil {
-				for _, pr := range prs {
-					data.State.PRs = append(data.State.PRs, PRInfo{
-						Number: pr.Number,
-						Title:  pr.Title,
-						Author: pr.Author,
-						URL:    pr.URL,
-					})
-				}
+			if err != nil {
+				// Log error but continue - PR tracking is optional
+				fmt.Printf("Warning: failed to fetch PRs between %s and HEAD: %v\n", previousTag, err)
+			}
+			for _, pr := range prs {
+				data.State.PRs = append(data.State.PRs, PRInfo{
+					Number: pr.Number,
+					Title:  pr.Title,
+					Author: pr.Author,
+					URL:    pr.URL,
+				})
 			}
 		}
 
