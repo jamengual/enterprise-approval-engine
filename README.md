@@ -7,6 +7,8 @@ Enterprise-grade GitHub Action for policy-based approval workflows with per-grou
 - **Flexible Approval Logic**: Support for both AND (all must approve) and threshold (X of N) logic within groups
 - **OR Logic Between Groups**: Multiple approval paths - any one group meeting requirements approves the request
 - **Mixed Approvers**: Combine individual users and GitHub teams in the same group
+- **Progressive Deployment Pipelines**: Single-issue tracking through multiple environments (dev → qa → stage → prod)
+- **PR and Commit Tracking**: Automatically list PRs and commits in deployment issues for release management
 - **Semver Tag Creation**: Automatically create git tags upon approval
 - **Policy-Based Configuration**: Define reusable approval policies in YAML
 - **Issue-Based Workflow**: Transparent audit trail through GitHub issues
@@ -33,6 +35,7 @@ Enterprise-grade GitHub Action for policy-based approval workflows with per-grou
 - [Feature Details](#feature-details)
   - [Approval Keywords](#approval-keywords)
   - [Team Support](#team-support)
+  - [Progressive Deployment Pipelines](#progressive-deployment-pipelines)
   - [Jira Integration](#jira-integration)
   - [Deployment Tracking](#deployment-tracking)
   - [External Config Repository](#external-config-repository)
@@ -602,6 +605,185 @@ jobs:
 **Required GitHub App permissions:**
 
 - `Organization > Members: Read` - To list team members
+
+### Progressive Deployment Pipelines
+
+Track deployments through multiple environments with a single approval issue. As each stage is approved, the issue updates to show progress and automatically advances to the next stage.
+
+#### Pipeline Configuration
+
+```yaml
+# .github/approvals.yml or external config
+version: 1
+
+policies:
+  developers:
+    approvers: [dev1, dev2, dev3]
+    min_approvals: 1
+
+  qa-team:
+    approvers: [qa1, qa2]
+    min_approvals: 1
+
+  tech-leads:
+    approvers: [lead1, lead2]
+    min_approvals: 1
+
+  production-approvers:
+    approvers: [sre1, sre2, security-lead]
+    require_all: true
+
+workflows:
+  deploy:
+    description: "Deploy through all environments (dev → qa → stage → prod)"
+    require:
+      - policy: developers  # Initial approval to start pipeline
+    pipeline:
+      track_prs: true       # Include PRs in the issue body
+      track_commits: true   # Include commits in the issue body
+      stages:
+        - name: dev
+          environment: development
+          policy: developers
+          on_approved: "✅ **DEV** deployment approved! Proceeding to QA..."
+        - name: qa
+          environment: qa
+          policy: qa-team
+          on_approved: "✅ **QA** deployment approved! Proceeding to STAGING..."
+        - name: stage
+          environment: staging
+          policy: tech-leads
+          on_approved: "✅ **STAGING** deployment approved! Ready for PRODUCTION..."
+        - name: prod
+          environment: production
+          policy: production-approvers
+          on_approved: "🚀 **PRODUCTION** deployment complete!"
+          create_tag: true   # Create tag when PROD is approved
+          is_final: true     # Close issue after this stage
+    on_approved:
+      close_issue: true
+      comment: |
+        🎉 **Deployment Complete!**
+
+        Version `{{version}}` has been deployed to all environments.
+```
+
+#### Pipeline Workflow Example
+
+```yaml
+# .github/workflows/request-pipeline.yml
+name: Request Pipeline Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to deploy'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: read  # Required for PR tracking
+
+jobs:
+  request:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Needed for commit/PR comparison
+
+      - uses: RogueCloud/issueops-approvals@v1
+        id: approval
+        with:
+          action: request
+          workflow: deploy
+          version: ${{ inputs.version }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Output Results
+        run: |
+          echo "## Pipeline Deployment Started" >> $GITHUB_STEP_SUMMARY
+          echo "- **Issue:** #${{ steps.approval.outputs.issue_number }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **URL:** ${{ steps.approval.outputs.issue_url }}" >> $GITHUB_STEP_SUMMARY
+```
+
+#### How It Works
+
+1. **Issue Creation**: When triggered, creates a single issue showing all stages with a progress table:
+
+```markdown
+## 🚀 Deployment Pipeline: v1.2.0
+
+### Deployment Progress
+
+| Stage | Status | Approver | Time |
+|-------|--------|----------|------|
+| DEV | ⏳ Awaiting | - | - |
+| QA | ⬜ Pending | - | - |
+| STAGE | ⬜ Pending | - | - |
+| PROD | ⬜ Pending | - | - |
+
+**Current Stage:** DEV
+```
+
+2. **Stage Progression**: Comment `approve` to advance to the next stage. The table updates automatically:
+
+```markdown
+| Stage | Status | Approver | Time |
+|-------|--------|----------|------|
+| DEV | ✅ Deployed | @developer1 | Dec 9 10:30 |
+| QA | ✅ Deployed | @qa-lead | Dec 9 14:15 |
+| STAGE | ⏳ Awaiting | - | - |
+| PROD | ⬜ Pending | - | - |
+
+**Current Stage:** STAGE
+```
+
+3. **PR and Commit Tracking**: Release managers see exactly what's being deployed:
+
+```markdown
+### Pull Requests in this Release
+
+| PR | Title | Author |
+|----|-------|--------|
+| [#42](https://...) | Add user authentication | @alice |
+| [#45](https://...) | Fix payment processing bug | @bob |
+
+### Commits
+
+- [`abc1234`](https://...) feat: add OAuth2 support
+- [`def5678`](https://...) fix: handle null payments
+```
+
+4. **Completion**: When the final stage is approved:
+   - Tag is created (if `create_tag: true`)
+   - Completion comment is posted
+   - Issue is automatically closed
+
+#### Pipeline Stage Options
+
+| Option | Description |
+|--------|-------------|
+| `name` | Stage name (displayed in table) |
+| `environment` | GitHub environment name |
+| `policy` | Approval policy for this stage |
+| `approvers` | Inline approvers (alternative to policy) |
+| `on_approved` | Message to post when stage is approved |
+| `create_tag` | Create a git tag at this stage |
+| `is_final` | Close the issue after this stage |
+
+#### Pipeline Config Options
+
+| Option | Description |
+|--------|-------------|
+| `track_prs` | Include merged PRs in the issue body |
+| `track_commits` | Include commits since last tag |
+| `compare_from_tag` | Custom tag pattern to compare from |
+
+**Note:** PR tracking requires `pull-requests: read` permission in your workflow.
 
 ### Jira Integration
 
