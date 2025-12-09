@@ -33,7 +33,7 @@ jobs:
 
       - name: Request Approval
         id: request
-        uses: issueops/approvals@v1
+        uses: RogueCloud/issueops-approvals@v1
         with:
           action: request
           workflow: ${{ inputs.environment }}-deploy

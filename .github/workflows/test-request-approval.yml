@@ -1,0 +1,52 @@
+# Request approval using external config from RogueCloud/.github
+name: Request Approval (External Config)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version for approval (e.g., v1.0.0)'
+        required: true
+        type: string
+      workflow_name:
+        description: 'Workflow to use from external config'
+        required: true
+        default: 'test-deploy'
+        type: choice
+        options:
+          - test-deploy
+          - release
+          - major-release
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  request:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Use the local action (current repo) with external config
+      - uses: ./
+        id: approval
+        with:
+          action: request
+          workflow: ${{ inputs.workflow_name }}
+          version: ${{ inputs.version }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          config_repo: RogueCloud/.github
+
+      - name: Output Results
+        env:
+          ISSUE_NUM: ${{ steps.approval.outputs.issue_number }}
+          ISSUE_URL: ${{ steps.approval.outputs.issue_url }}
+          STATUS: ${{ steps.approval.outputs.status }}
+        run: |
+          echo "## Approval Request Created" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Issue:** #${ISSUE_NUM}" >> $GITHUB_STEP_SUMMARY
+          echo "- **URL:** ${ISSUE_URL}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status:** ${STATUS}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Config Source:** RogueCloud/.github/issueops-approvals_approvals.yml" >> $GITHUB_STEP_SUMMARY

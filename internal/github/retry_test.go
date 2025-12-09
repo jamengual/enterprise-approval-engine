@@ -14,7 +14,7 @@ func TestRetryTransport_Success(t *testing.T) {
 	// Server that succeeds on first request
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status": "ok"}`))
+		_, _ = w.Write([]byte(`{"status": "ok"}`))
 	}))
 	defer server.Close()
 
@@ -49,11 +49,11 @@ func TestRetryTransport_RateLimitRetry(t *testing.T) {
 			w.Header().Set("X-RateLimit-Remaining", "0")
 			w.Header().Set("Retry-After", "0") // Immediate retry for test
 			w.WriteHeader(http.StatusForbidden)
-			w.Write([]byte(`{"message": "rate limit exceeded"}`))
+			_, _ = w.Write([]byte(`{"message": "rate limit exceeded"}`))
 			return
 		}
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status": "ok"}`))
+		_, _ = w.Write([]byte(`{"status": "ok"}`))
 	}))
 	defer server.Close()
 
@@ -91,11 +91,11 @@ func TestRetryTransport_429Retry(t *testing.T) {
 		if attempt == 1 {
 			w.Header().Set("Retry-After", "0")
 			w.WriteHeader(http.StatusTooManyRequests)
-			w.Write([]byte(`{"message": "too many requests"}`))
+			_, _ = w.Write([]byte(`{"message": "too many requests"}`))
 			return
 		}
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status": "ok"}`))
+		_, _ = w.Write([]byte(`{"status": "ok"}`))
 	}))
 	defer server.Close()
 
@@ -132,7 +132,7 @@ func TestRetryTransport_MaxRetriesExceeded(t *testing.T) {
 		atomic.AddInt32(&attempts, 1)
 		w.Header().Set("X-RateLimit-Remaining", "0")
 		w.WriteHeader(http.StatusForbidden)
-		w.Write([]byte(`{"message": "rate limit exceeded"}`))
+		_, _ = w.Write([]byte(`{"message": "rate limit exceeded"}`))
 	}))
 	defer server.Close()
 
@@ -200,7 +200,7 @@ func TestRetryTransport_NonRateLimitError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt32(&attempts, 1)
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(`{"message": "internal error"}`))
+		_, _ = w.Write([]byte(`{"message": "internal error"}`))
 	}))
 	defer server.Close()
 

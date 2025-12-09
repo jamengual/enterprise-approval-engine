@@ -16,7 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: issueops/approvals@v1
+      - uses: RogueCloud/issueops-approvals@v1
         id: close
         with:
           action: close-issue

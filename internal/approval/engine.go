@@ -49,11 +49,9 @@ func (e *Engine) Evaluate(req *Request) (*ApprovalResult, error) {
 
 		if parsed.IsDenial {
 			// Check if denier is an eligible approver in any group
+			// Note: Requestor can always deny (withdraw) their own request,
+			// even when allow_self_approval is false
 			if e.isEligibleApprover(req, comment.User) {
-				// Self-denial check (requestor can always deny their own request)
-				if !e.allowSelfApproval && strings.EqualFold(comment.User, req.Requestor) {
-					// Requestor can still deny (withdraw) their request
-				}
 				result.Denials = append(result.Denials, Denial{
 					User:      comment.User,
 					Timestamp: comment.CreatedAt,

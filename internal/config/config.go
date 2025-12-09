@@ -21,6 +21,48 @@ func Load(path string) (*Config, error) {
 	return Parse(data)
 }
 
+// LoadWithFallback tries to load config from external repo first, then falls back to local.
+// configRepo is the external repo (e.g., "org/.github")
+// repoName is the current repo name (used to construct filename like "reponame_approvals.yml")
+// localPath is the local config path to fall back to
+// fetchFunc is a function that fetches content from the external repo
+func LoadWithFallback(configRepo, repoName, localPath string, fetchFunc func(repo, path string) ([]byte, error)) (*Config, string, error) {
+	// Try external repo first if specified
+	if configRepo != "" && fetchFunc != nil {
+		// Try repo-specific config: {reponame}_approvals.yml
+		externalPath := repoName + "_approvals.yml"
+		data, err := fetchFunc(configRepo, externalPath)
+		if err == nil {
+			cfg, parseErr := Parse(data)
+			if parseErr == nil {
+				return cfg, configRepo + "/" + externalPath, nil
+			}
+			// If parse error, return it (config exists but is invalid)
+			return nil, "", fmt.Errorf("failed to parse external config %s/%s: %w", configRepo, externalPath, parseErr)
+		}
+
+		// Try default shared config: approvals.yml
+		data, err = fetchFunc(configRepo, "approvals.yml")
+		if err == nil {
+			cfg, parseErr := Parse(data)
+			if parseErr == nil {
+				return cfg, configRepo + "/approvals.yml", nil
+			}
+			return nil, "", fmt.Errorf("failed to parse external config %s/approvals.yml: %w", configRepo, parseErr)
+		}
+
+		// External repo specified but config not found - continue to local fallback
+	}
+
+	// Fall back to local config
+	cfg, err := Load(localPath)
+	if err != nil {
+		return nil, "", err
+	}
+
+	return cfg, localPath, nil
+}
+
 // Parse parses YAML data into a Config struct.
 func Parse(data []byte) (*Config, error) {
 	var cfg Config

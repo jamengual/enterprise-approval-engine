@@ -120,3 +120,33 @@ func IsForbidden(err error) bool {
 	}
 	return false
 }
+
+// GetFileContents fetches the contents of a file from a repository.
+func (c *Client) GetFileContents(ctx context.Context, owner, repo, path string) ([]byte, error) {
+	content, _, _, err := c.client.Repositories.GetContents(ctx, owner, repo, path, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get file %s from %s/%s: %w", path, owner, repo, err)
+	}
+
+	if content == nil {
+		return nil, fmt.Errorf("file %s not found in %s/%s", path, owner, repo)
+	}
+
+	decoded, err := content.GetContent()
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode file content: %w", err)
+	}
+
+	return []byte(decoded), nil
+}
+
+// GetFileContentsFromRepo fetches file contents from any repo (for external config).
+// The repo parameter should be in "owner/repo" format.
+func (c *Client) GetFileContentsFromRepo(ctx context.Context, repoFullName, path string) ([]byte, error) {
+	parts := strings.SplitN(repoFullName, "/", 2)
+	if len(parts) != 2 {
+		return nil, fmt.Errorf("invalid repo format: %s (expected owner/repo)", repoFullName)
+	}
+
+	return c.GetFileContents(ctx, parts[0], parts[1], path)
+}

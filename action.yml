@@ -50,8 +50,55 @@ inputs:
     required: false
     default: '.github/approvals.yml'
 
+  config_repo:
+    description: 'External repository for shared config (e.g., org/.github). Config file will be {repo-name}_approvals.yml'
+    required: false
+
   issue_action:
     description: 'Issue event action (closed, reopened) for close-issue action'
+    required: false
+
+  # Jira Integration
+  jira_base_url:
+    description: 'Jira Cloud base URL (e.g., https://yourcompany.atlassian.net)'
+    required: false
+
+  jira_user_email:
+    description: 'Jira user email for API authentication'
+    required: false
+
+  jira_api_token:
+    description: 'Jira API token for authentication'
+    required: false
+
+  jira_update_fix_version:
+    description: 'Update Jira issues with Fix Version on approval'
+    required: false
+    default: 'true'
+
+  # Deployment Tracking
+  create_deployment:
+    description: 'Create GitHub deployment for tracking in deployment dashboard'
+    required: false
+    default: 'true'
+
+  deployment_environment:
+    description: 'Target environment for deployment tracking (e.g., production, staging)'
+    required: false
+    default: 'production'
+
+  deployment_environment_url:
+    description: 'URL to the deployed environment'
+    required: false
+
+  # Release Notes
+  include_jira_issues:
+    description: 'Include Jira issues in approval request body'
+    required: false
+    default: 'true'
+
+  previous_tag:
+    description: 'Previous tag to compare commits against (auto-detected if not specified)'
     required: false
 
 outputs:
@@ -78,6 +125,27 @@ outputs:
 
   tag_deleted:
     description: 'Tag that was deleted (for close-issue action)'
+
+  # Jira outputs
+  jira_issues:
+    description: 'Comma-separated list of Jira issue keys in this release'
+
+  jira_issues_json:
+    description: 'JSON array of Jira issue details (key, summary, type, status)'
+
+  # Deployment outputs
+  deployment_id:
+    description: 'GitHub deployment ID for status updates'
+
+  deployment_url:
+    description: 'URL to the deployment in GitHub'
+
+  # Release notes
+  release_notes:
+    description: 'Auto-generated release notes from commits and Jira issues'
+
+  commits_count:
+    description: 'Number of commits in this release'
 
 runs:
   using: 'docker'

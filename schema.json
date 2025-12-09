@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://raw.githubusercontent.com/issueops/approvals/main/schema.json",
+  "$id": "https://raw.githubusercontent.com/RogueCloud/issueops-approvals/main/schema.json",
   "title": "IssueOps Approvals Configuration",
   "description": "Configuration schema for IssueOps Approvals action",
   "type": "object",

@@ -12,16 +12,22 @@ import (
 
 	"github.com/issueops/approvals/internal/approval"
 	"github.com/issueops/approvals/internal/config"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 // IssueState contains hidden state embedded in the issue body.
 type IssueState struct {
-	Workflow   string `json:"workflow"`
-	Version    string `json:"version,omitempty"`
-	Requestor  string `json:"requestor"`
-	RunID      string `json:"run_id,omitempty"`
-	Tag        string `json:"tag,omitempty"`        // Tag that was created (for deletion on close)
-	ApprovedAt string `json:"approved_at,omitempty"` // Timestamp when approved
+	Workflow     string   `json:"workflow"`
+	Version      string   `json:"version,omitempty"`
+	Requestor    string   `json:"requestor"`
+	RunID        string   `json:"run_id,omitempty"`
+	Tag          string   `json:"tag,omitempty"`          // Tag that was created (for deletion on close)
+	ApprovedAt   string   `json:"approved_at,omitempty"`  // Timestamp when approved
+	DeploymentID int64    `json:"deployment_id,omitempty"` // GitHub deployment ID
+	Environment  string   `json:"environment,omitempty"`   // Target environment
+	JiraIssues   []string `json:"jira_issues,omitempty"`   // Jira issue keys in this release
+	PreviousTag  string   `json:"previous_tag,omitempty"`  // Previous tag for comparison
 }
 
 // TemplateData contains data for issue body templates.
@@ -53,8 +59,46 @@ type TemplateData struct {
 	// Custom variables (from workflow inputs or environment)
 	Vars map[string]string
 
+	// Jira integration
+	JiraIssues      []JiraIssueData // Jira issues in this release
+	JiraIssuesTable string          // Pre-rendered markdown table of Jira issues
+	JiraBaseURL     string          // Jira base URL for linking
+	HasJiraIssues   bool            // Whether there are Jira issues
+
+	// Deployment tracking
+	DeploymentPipeline []DeploymentStageData // Deployment stages
+	PipelineTable      string                // Pre-rendered deployment pipeline
+	CurrentDeployment  *DeploymentStageData  // Current deployment stage
+
+	// Release info
+	PreviousVersion string // Previous version/tag
+	CommitsCount    int    // Number of commits in this release
+	ReleaseNotes    string // Auto-generated release notes
+
 	// Internal state (serialized to hidden comment)
 	State IssueState
+}
+
+// JiraIssueData contains data for a Jira issue.
+type JiraIssueData struct {
+	Key       string // e.g., "PROJ-123"
+	Summary   string
+	Type      string // e.g., "Bug", "Feature", "Task"
+	TypeEmoji string // e.g., "🐛", "✨", "📋"
+	Status    string // e.g., "Done", "In Progress"
+	StatusEmoji string
+	URL       string // Full URL to the issue
+	Assignee  string
+}
+
+// DeploymentStageData contains data for a deployment stage.
+type DeploymentStageData struct {
+	Environment string // e.g., "development", "staging", "production"
+	Status      string // e.g., "deployed", "pending", "not_started"
+	StatusEmoji string
+	Version     string // Version deployed to this environment
+	DeployedAt  string
+	IsCurrent   bool // Is this the current target environment?
 }
 
 // GroupTemplateData contains data for a single approval group.
@@ -81,7 +125,7 @@ const DefaultIssueTemplate = `## 🚀 {{.Title}}
 - **Requested by:** @{{.Requestor}}
 {{- end}}
 {{- if .Version}}
-- **Version:** ` + "`{{.Version}}`" + `
+- **Version:** ` + "`{{.Version}}`" + `{{if .PreviousVersion}} (from ` + "`{{.PreviousVersion}}`" + `){{end}}
 {{- end}}
 {{- if .Environment}}
 - **Environment:** {{.Environment}}
@@ -92,14 +136,33 @@ const DefaultIssueTemplate = `## 🚀 {{.Title}}
 {{- if .CommitSHA}}
 - **Commit:** [{{slice .CommitSHA 0 7}}]({{.CommitURL}})
 {{- end}}
+{{- if .CommitsCount}}
+- **Commits:** {{.CommitsCount}} commits in this release
+{{- end}}
 {{- if .RunURL}}
 - **Workflow Run:** [View Run]({{.RunURL}})
 {{- end}}
 - **Requested at:** {{.Timestamp}}
-
+{{if .HasJiraIssues}}
 ---
 
-### Approval Requirements
+### 📋 Jira Issues in this Release
+
+| Key | Summary | Type | Status |
+|-----|---------|------|--------|
+{{- range .JiraIssues}}
+| [{{.Key}}]({{.URL}}) | {{.Summary}} | {{.TypeEmoji}} {{.Type}} | {{.StatusEmoji}} {{.Status}} |
+{{- end}}
+{{end}}{{if .PipelineTable}}
+---
+
+### 🛤️ Deployment Pipeline
+
+{{.PipelineTable}}
+{{end}}
+---
+
+### ✅ Approval Requirements
 
 This request can be approved by **any one** of the following groups:
 
@@ -150,6 +213,17 @@ func GenerateIssueBodyWithTemplate(data TemplateData, templateStr string) (strin
 	// Pre-render the groups table for {{.GroupsTable}} convenience variable
 	data.GroupsTable = renderGroupsTable(data.Groups)
 
+	// Pre-render Jira issues table
+	if len(data.JiraIssues) > 0 {
+		data.JiraIssuesTable = renderJiraIssuesTable(data.JiraIssues)
+		data.HasJiraIssues = true
+	}
+
+	// Pre-render deployment pipeline table
+	if len(data.DeploymentPipeline) > 0 {
+		data.PipelineTable = renderPipelineTable(data.DeploymentPipeline)
+	}
+
 	// Set timestamp if not provided
 	if data.Timestamp == "" {
 		data.Timestamp = time.Now().UTC().Format("2006-01-02 15:04:05 UTC")
@@ -169,9 +243,11 @@ func GenerateIssueBodyWithTemplate(data TemplateData, templateStr string) (strin
 			}
 			return s[start:end]
 		},
-		"upper":    strings.ToUpper,
-		"lower":    strings.ToLower,
-		"title":    strings.Title,
+		"upper": strings.ToUpper,
+		"lower": strings.ToLower,
+		"title": func(s string) string {
+			return cases.Title(language.English).String(s)
+		},
 		"contains": strings.Contains,
 		"replace":  strings.ReplaceAll,
 		"join":     strings.Join,
@@ -257,6 +333,89 @@ func renderGroupsTable(groups []GroupTemplateData) string {
 	}
 
 	return buf.String()
+}
+
+// renderJiraIssuesTable renders Jira issues as a markdown table.
+func renderJiraIssuesTable(issues []JiraIssueData) string {
+	if len(issues) == 0 {
+		return "_No Jira issues found_"
+	}
+
+	var buf bytes.Buffer
+	buf.WriteString("| Key | Summary | Type | Status |\n")
+	buf.WriteString("|-----|---------|------|--------|\n")
+
+	for _, issue := range issues {
+		summary := issue.Summary
+		// Truncate long summaries
+		if len(summary) > 60 {
+			summary = summary[:57] + "..."
+		}
+		// Escape pipe characters in summary
+		summary = strings.ReplaceAll(summary, "|", "\\|")
+
+		buf.WriteString(fmt.Sprintf("| [%s](%s) | %s | %s %s | %s %s |\n",
+			issue.Key, issue.URL, summary,
+			issue.TypeEmoji, issue.Type,
+			issue.StatusEmoji, issue.Status))
+	}
+
+	return buf.String()
+}
+
+// renderPipelineTable renders the deployment pipeline as a markdown table.
+func renderPipelineTable(stages []DeploymentStageData) string {
+	if len(stages) == 0 {
+		return ""
+	}
+
+	var buf bytes.Buffer
+	buf.WriteString("| Environment | Version | Status |\n")
+	buf.WriteString("|-------------|---------|--------|\n")
+
+	for _, stage := range stages {
+		env := stage.Environment
+		if stage.IsCurrent {
+			env = "**" + env + "**"
+		}
+
+		version := stage.Version
+		if version == "" {
+			version = "-"
+		}
+
+		status := stage.StatusEmoji + " " + stage.Status
+		if stage.IsCurrent {
+			status = "**" + status + "**"
+		}
+
+		buf.WriteString(fmt.Sprintf("| %s | %s | %s |\n", env, version, status))
+	}
+
+	return buf.String()
+}
+
+// BuildDeploymentPipeline creates deployment stage data for common environments.
+func BuildDeploymentPipeline(targetEnv string, version string, previousVersion string) []DeploymentStageData {
+	// Common deployment pipeline stages
+	stages := []DeploymentStageData{
+		{Environment: "development", Status: "deployed", StatusEmoji: "✅", Version: version},
+		{Environment: "staging", Status: "deployed", StatusEmoji: "✅", Version: version},
+		{Environment: "production", Status: "awaiting approval", StatusEmoji: "⏳", Version: previousVersion},
+	}
+
+	// Mark the target environment as current and update status
+	for i := range stages {
+		if stages[i].Environment == targetEnv {
+			stages[i].IsCurrent = true
+			stages[i].Status = "awaiting approval"
+			stages[i].StatusEmoji = "⏳"
+			// Previous stages are already deployed
+			break
+		}
+	}
+
+	return stages
 }
 
 // BuildGroupTemplateData converts config requirements to template data.

@@ -60,8 +60,8 @@ changelog:
 # Docker image for GitHub Action
 dockers:
   - image_templates:
-      - "ghcr.io/issueops/approvals:{{ .Tag }}"
-      - "ghcr.io/issueops/approvals:latest"
+      - "ghcr.io/roguecloud/issueops-approvals:{{ .Tag }}"
+      - "ghcr.io/roguecloud/issueops-approvals:latest"
     dockerfile: Dockerfile
     build_flag_templates:
       - "--pull"
