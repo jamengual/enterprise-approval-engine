@@ -24,8 +24,6 @@ RUN apk add --no-cache ca-certificates git
 # Copy binary from builder
 COPY --from=builder /issueops-approvals /issueops-approvals
 
-# Run as non-root user
-RUN adduser -D -u 1000 appuser
-USER appuser
-
+# Note: Running as root is required for GitHub Actions to write outputs
+# The mounted file_commands directory requires root access
 ENTRYPOINT ["/issueops-approvals"]
