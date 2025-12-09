@@ -636,32 +636,79 @@ func (h *Handler) processPipelineComment(
 	return output, nil
 }
 
-// regeneratePipelineIssueBody updates the issue body with current pipeline state.
+// regeneratePipelineIssueBody regenerates the full issue body with updated pipeline state.
 func regeneratePipelineIssueBody(originalBody string, state *IssueState, pipeline *config.PipelineConfig) string {
-	// Update the state in the body
-	updatedBody, err := UpdateIssueState(originalBody, *state)
-	if err != nil {
-		return ""
+	// Extract metadata from original body to preserve it
+	// Build a minimal template data from state
+	data := &TemplateData{
+		Version:     state.Version,
+		Requestor:   state.Requestor,
+		Description: extractDescription(originalBody),
+		Branch:      extractBranch(originalBody),
+		CommitSHA:   extractCommitSHA(originalBody),
+		CommitURL:   extractCommitURL(originalBody),
+		State:       *state,
 	}
 
-	// Also update the pipeline progress table in the visible part of the body
-	// Look for the existing table and replace it
-	newTable := GeneratePipelineTable(state, pipeline)
+	// Generate complete new body
+	return GeneratePipelineIssueBody(data, state, pipeline)
+}
 
-	// Find and replace the pipeline table section
-	tableStart := strings.Index(updatedBody, "| Stage | Status | Approver | Time |")
-	if tableStart != -1 {
-		// Find the end of the table (next section or state marker)
-		tableEnd := strings.Index(updatedBody[tableStart:], "\n\n")
-		if tableEnd == -1 {
-			tableEnd = strings.Index(updatedBody[tableStart:], "<!-- issueops-state:")
-		}
-		if tableEnd != -1 {
-			updatedBody = updatedBody[:tableStart] + newTable + updatedBody[tableStart+tableEnd:]
+// extractDescription extracts the description from the original body.
+func extractDescription(body string) string {
+	// Look for content after the title line
+	lines := strings.Split(body, "\n")
+	for i, line := range lines {
+		if strings.HasPrefix(line, "## ") {
+			// Next non-empty line is description
+			if i+1 < len(lines) && i+2 < len(lines) {
+				desc := strings.TrimSpace(lines[i+2])
+				if desc != "" && !strings.HasPrefix(desc, "#") && !strings.HasPrefix(desc, "|") {
+					return desc
+				}
+			}
 		}
 	}
+	return ""
+}
 
-	return updatedBody
+// extractBranch extracts the branch from the original body.
+func extractBranch(body string) string {
+	if idx := strings.Index(body, "**Branch:** `"); idx != -1 {
+		start := idx + len("**Branch:** `")
+		end := strings.Index(body[start:], "`")
+		if end != -1 {
+			return body[start : start+end]
+		}
+	}
+	return ""
+}
+
+// extractCommitSHA extracts the commit SHA from the original body.
+func extractCommitSHA(body string) string {
+	if idx := strings.Index(body, "**Commit:** ["); idx != -1 {
+		start := idx + len("**Commit:** [")
+		end := strings.Index(body[start:], "]")
+		if end != -1 {
+			return body[start : start+end]
+		}
+	}
+	return ""
+}
+
+// extractCommitURL extracts the commit URL from the original body.
+func extractCommitURL(body string) string {
+	if idx := strings.Index(body, "**Commit:** ["); idx != -1 {
+		urlStart := strings.Index(body[idx:], "](")
+		if urlStart != -1 {
+			urlStart += idx + 2
+			urlEnd := strings.Index(body[urlStart:], ")")
+			if urlEnd != -1 {
+				return body[urlStart : urlStart+urlEnd]
+			}
+		}
+	}
+	return ""
 }
 
 // formatApproversList formats a list of approvers for display.
