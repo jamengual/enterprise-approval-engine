@@ -32,6 +32,8 @@ Enterprise-grade GitHub Action for policy-based approval workflows with per-grou
   - [Tagging](#tagging-configuration)
   - [Custom Templates](#custom-issue-templates)
   - [Defaults](#defaults)
+  - [Semver](#semver)
+- [Complete Configuration Reference](#complete-configuration-reference)
 - [Feature Details](#feature-details)
   - [Approval Keywords](#approval-keywords)
   - [Team Support](#team-support)
@@ -563,7 +565,208 @@ semver:
   strategy: input          # Use version from input
   validate: true           # Validate semver format
   allow_prerelease: true   # Allow prerelease versions (e.g., v1.0.0-beta.1)
+  auto:                    # Label-based auto-increment (when strategy: auto)
+    major_labels: [breaking, major]
+    minor_labels: [feature, minor]
+    patch_labels: [fix, patch, bug]
 ```
+
+---
+
+## Complete Configuration Reference
+
+This section documents **every configuration option** available in `approvals.yml`.
+
+### Top-Level Structure
+
+```yaml
+version: 1                    # Required: config version (always 1)
+defaults: { ... }             # Optional: global defaults
+policies: { ... }             # Required: reusable approval policies
+workflows: { ... }            # Required: approval workflows
+semver: { ... }               # Optional: version handling settings
+```
+
+### `defaults` Options
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `timeout` | duration | `72h` | Timeout for blocking `check` action with `wait: true`. Use hours (e.g., `168h` for 1 week). Not needed for event-driven workflows. |
+| `allow_self_approval` | bool | `false` | Whether the requestor can approve their own request |
+| `issue_labels` | string[] | `[]` | Labels added to all approval issues |
+
+### `policies.<name>` Options (Simple Format)
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `approvers` | string[] | - | List of usernames or `team:slug` references |
+| `min_approvals` | int | 0 | Number of approvals required (0 = use `require_all`) |
+| `require_all` | bool | `false` | If true, ALL approvers must approve |
+
+### `policies.<name>` Options (Advanced Format)
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `from` | source[] | - | List of approver sources with individual thresholds |
+| `logic` | string | `"and"` | How to combine sources: `"and"` or `"or"` |
+
+**Approver Source Options (`from[]`):**
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `team` | string | - | Team slug (e.g., `"platform"` or `"org/platform"`) |
+| `user` | string | - | Single username |
+| `users` | string[] | - | List of usernames |
+| `min_approvals` | int | 1 | Approvals required from this source |
+| `require_all` | bool | `false` | All from this source must approve |
+| `logic` | string | - | Logic to next source: `"and"` or `"or"` |
+
+### `workflows.<name>` Options
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `description` | string | - | Human-readable description |
+| `trigger` | map | - | Trigger conditions (for filtering) |
+| `require` | requirement[] | - | **Required:** Approval requirements (OR logic between items) |
+| `issue` | object | - | Issue creation settings |
+| `on_approved` | object | - | Actions when approved |
+| `on_denied` | object | - | Actions when denied |
+| `on_closed` | object | - | Actions when issue is manually closed |
+| `pipeline` | object | - | Progressive deployment pipeline config |
+
+### `workflows.<name>.require[]` Options
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `policy` | string | - | Reference to a defined policy |
+| `approvers` | string[] | - | Inline approvers (alternative to policy) |
+| `min_approvals` | int | - | Override policy's min_approvals |
+| `require_all` | bool | - | Override policy's require_all |
+
+### `workflows.<name>.issue` Options
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `title` | string | `"Approval Required: {workflow}"` | Issue title (supports `{{version}}`, `{{environment}}`, `{{workflow}}`) |
+| `body` | string | - | Custom issue body template (Go template syntax) |
+| `body_file` | string | - | Path to template file (relative to `.github/`) |
+| `labels` | string[] | `[]` | Additional labels for this workflow |
+| `assignees_from_policy` | bool | `false` | Auto-assign individual users from policies (max 10) |
+
+### `workflows.<name>.on_approved` Options
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `create_tag` | bool | `false` | Create a git tag (uses input version) |
+| `close_issue` | bool | `false` | Close the issue after approval |
+| `comment` | string | - | Comment to post (supports `{{version}}`, `{{satisfied_group}}`) |
+| `tagging` | object | - | Advanced tagging configuration |
+
+### `workflows.<name>.on_approved.tagging` Options
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `enabled` | bool | `false` | Enable tag creation |
+| `start_version` | string | `"0.0.0"` | Initial version (e.g., `"v1.0.0"` or `"1.0.0"`) |
+| `prefix` | string | (inferred) | Version prefix (inferred from `start_version`) |
+| `auto_increment` | string | - | Auto-bump: `"major"`, `"minor"`, `"patch"`, or omit for manual |
+| `env_prefix` | string | - | Environment prefix (e.g., `"dev-"` creates `"dev-v1.0.0"`) |
+
+### `workflows.<name>.on_denied` Options
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `close_issue` | bool | `false` | Close the issue after denial |
+| `comment` | string | - | Comment to post (supports `{{denier}}`) |
+
+### `workflows.<name>.on_closed` Options
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `delete_tag` | bool | `false` | Delete the associated tag when issue is closed |
+| `comment` | string | - | Comment to post (supports `{{tag}}`, `{{version}}`) |
+
+### `workflows.<name>.pipeline` Options
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `stages` | stage[] | - | **Required:** Ordered list of deployment stages |
+| `track_prs` | bool | `false` | Include merged PRs in issue body |
+| `track_commits` | bool | `false` | Include commits in issue body |
+| `compare_from_tag` | string | - | Tag pattern to compare from (e.g., `"v*"`) |
+| `release_strategy` | object | - | Release candidate selection strategy |
+
+### `workflows.<name>.pipeline.stages[]` Options
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `name` | string | - | **Required:** Stage name (e.g., `"dev"`, `"prod"`) |
+| `environment` | string | - | GitHub environment name |
+| `policy` | string | - | Approval policy for this stage |
+| `approvers` | string[] | - | Inline approvers (alternative to policy) |
+| `on_approved` | string | - | Comment to post when stage is approved |
+| `create_tag` | bool | `false` | Create a git tag at this stage |
+| `is_final` | bool | `false` | Close issue after this stage |
+
+### `workflows.<name>.pipeline.release_strategy` Options
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `type` | string | `"tag"` | Strategy: `"tag"`, `"branch"`, `"label"`, `"milestone"` |
+| `branch` | object | - | Branch strategy settings |
+| `label` | object | - | Label strategy settings |
+| `milestone` | object | - | Milestone strategy settings |
+| `auto_create` | object | - | Auto-create next release artifact |
+
+### `release_strategy.branch` Options
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `pattern` | string | `"release/{{version}}"` | Branch naming pattern |
+| `base_branch` | string | `"main"` | Branch to compare against |
+| `delete_after_release` | bool | `false` | Delete branch after prod deployment |
+
+### `release_strategy.label` Options
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `pattern` | string | `"release:{{version}}"` | Label naming pattern |
+| `pending_label` | string | - | Label for PRs awaiting release assignment |
+| `remove_after_release` | bool | `false` | Remove labels after prod deployment |
+
+### `release_strategy.milestone` Options
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `pattern` | string | `"v{{version}}"` | Milestone naming pattern |
+| `close_after_release` | bool | `false` | Close milestone after prod deployment |
+
+### `release_strategy.auto_create` Options
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `enabled` | bool | `false` | Enable auto-creation on final stage completion |
+| `next_version` | string | `"patch"` | Version increment: `"patch"`, `"minor"`, `"major"` |
+| `create_issue` | bool | `false` | Create new approval issue for next release |
+| `comment` | string | - | Comment to post about next release |
+
+### `semver` Options
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `prefix` | string | `"v"` | Tag prefix |
+| `strategy` | string | `"input"` | Version strategy: `"input"`, `"auto"` |
+| `validate` | bool | `false` | Validate semver format |
+| `allow_prerelease` | bool | `false` | Allow prerelease versions (e.g., `v1.0.0-beta.1`) |
+| `auto` | object | - | Label-based auto-increment settings |
+
+### `semver.auto` Options
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `major_labels` | string[] | `[]` | PR labels that trigger major bump |
+| `minor_labels` | string[] | `[]` | PR labels that trigger minor bump |
+| `patch_labels` | string[] | `[]` | PR labels that trigger patch bump |
 
 ---
 
