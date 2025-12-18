@@ -4,7 +4,7 @@ package approval
 import (
 	"time"
 
-	"github.com/issueops/approvals/internal/config"
+	"github.com/jamengual/enterprise-approval-engine/internal/config"
 )
 
 // Status represents the current approval state.

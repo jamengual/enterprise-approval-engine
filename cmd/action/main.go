@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/issueops/approvals/internal/action"
+	"github.com/jamengual/enterprise-approval-engine/internal/action"
 )
 
 func main() {

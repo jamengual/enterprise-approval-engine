@@ -4,7 +4,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/issueops/approvals/internal/config"
+	"github.com/jamengual/enterprise-approval-engine/internal/config"
 )
 
 // Engine evaluates approval status based on comments and configuration.

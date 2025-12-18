@@ -10,8 +10,8 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/issueops/approvals/internal/approval"
-	"github.com/issueops/approvals/internal/config"
+	"github.com/jamengual/enterprise-approval-engine/internal/approval"
+	"github.com/jamengual/enterprise-approval-engine/internal/config"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )

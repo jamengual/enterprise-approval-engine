@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/issueops/approvals/internal/config"
+	"github.com/jamengual/enterprise-approval-engine/internal/config"
 )
 
 func TestGeneratePipelineTable(t *testing.T) {

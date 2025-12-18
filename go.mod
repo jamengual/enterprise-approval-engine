@@ -1,4 +1,4 @@
-module github.com/issueops/approvals
+module github.com/jamengual/enterprise-approval-engine
 
 go 1.24.0
 

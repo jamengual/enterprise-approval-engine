@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/issueops/approvals/internal/config"
+	"github.com/jamengual/enterprise-approval-engine/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/issueops/approvals/internal/config"
-	"github.com/issueops/approvals/internal/github"
+	"github.com/jamengual/enterprise-approval-engine/internal/config"
+	"github.com/jamengual/enterprise-approval-engine/internal/github"
 )
 
 // ReleaseTracker fetches release candidates based on the configured strategy.

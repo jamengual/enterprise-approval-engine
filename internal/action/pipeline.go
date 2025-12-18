@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/issueops/approvals/internal/approval"
-	"github.com/issueops/approvals/internal/config"
+	"github.com/jamengual/enterprise-approval-engine/internal/approval"
+	"github.com/jamengual/enterprise-approval-engine/internal/config"
 )
 
 // PipelineProcessor handles progressive deployment pipelines.

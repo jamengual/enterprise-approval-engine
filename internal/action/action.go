@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/issueops/approvals/internal/approval"
-	"github.com/issueops/approvals/internal/config"
-	"github.com/issueops/approvals/internal/github"
-	"github.com/issueops/approvals/internal/semver"
+	"github.com/jamengual/enterprise-approval-engine/internal/approval"
+	"github.com/jamengual/enterprise-approval-engine/internal/config"
+	"github.com/jamengual/enterprise-approval-engine/internal/github"
+	"github.com/jamengual/enterprise-approval-engine/internal/semver"
 )
 
 // Handler handles action execution.

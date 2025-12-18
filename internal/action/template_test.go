@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/issueops/approvals/internal/approval"
-	"github.com/issueops/approvals/internal/config"
+	"github.com/jamengual/enterprise-approval-engine/internal/approval"
+	"github.com/jamengual/enterprise-approval-engine/internal/config"
 )
 
 func TestGenerateIssueBody(t *testing.T) {
