@@ -21,7 +21,7 @@ jobs:
 
       - name: Process Approval Comment
         id: process
-        uses: RogueCloud/issueops-approvals@v1
+        uses: jamengual/enterprise-approval-engine@v1
         with:
           action: process-comment
           issue_number: ${{ github.event.issue.number }}

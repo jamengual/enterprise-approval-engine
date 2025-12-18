@@ -121,6 +121,7 @@ type PipelineStage struct {
 	OnApproved  string   `yaml:"on_approved,omitempty"`  // Comment to post when stage is approved
 	CreateTag   bool     `yaml:"create_tag,omitempty"`   // Create tag at this stage
 	IsFinal     bool     `yaml:"is_final,omitempty"`     // If true, close issue after this stage
+	AutoApprove bool     `yaml:"auto_approve,omitempty"` // If true, automatically approve this stage without human intervention
 }
 
 // IsPipeline returns true if this workflow uses a progressive pipeline.

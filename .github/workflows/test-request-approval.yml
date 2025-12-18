@@ -1,4 +1,4 @@
-# Request approval using external config from RogueCloud/.github
+# Request approval using external config from jamengual/.github
 name: Request Approval (External Config)
 
 on:
@@ -40,7 +40,7 @@ jobs:
           workflow: ${{ inputs.workflow_name }}
           version: ${{ inputs.version }}
           token: ${{ secrets.GITHUB_TOKEN }}
-          config_repo: RogueCloud/.github
+          config_repo: jamengual/.github
 
       - name: Output Results
         env:
@@ -53,4 +53,4 @@ jobs:
           echo "- **Issue:** #${ISSUE_NUM}" >> $GITHUB_STEP_SUMMARY
           echo "- **URL:** ${ISSUE_URL}" >> $GITHUB_STEP_SUMMARY
           echo "- **Status:** ${STATUS}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Config Source:** RogueCloud/.github/issueops-approvals_approvals.yml" >> $GITHUB_STEP_SUMMARY
+          echo "- **Config Source:** jamengual/.github/enterprise-approval-engine_approvals.yml" >> $GITHUB_STEP_SUMMARY

@@ -215,6 +215,84 @@ workflows:
       close_issue: true
       comment: "Migration approved. Proceed with caution."
 
+  #############################################
+  # PROGRESSIVE PIPELINE - with auto-approve
+  #############################################
+
+  # Progressive deployment through multiple environments
+  # Dev and integration are auto-approved, staging and production require manual approval
+  progressive-release:
+    description: "Progressive deployment through environments"
+    require:
+      - policy: dev-team  # Fallback if not using pipeline
+    pipeline:
+      stages:
+        # Auto-approve: Deploy to dev immediately
+        - name: dev
+          environment: development
+          auto_approve: true
+          on_approved: "🤖 DEV deployed automatically"
+
+        # Auto-approve: Deploy to integration immediately
+        - name: integration
+          environment: integration
+          auto_approve: true
+          on_approved: "🤖 INTEGRATION deployed automatically"
+
+        # Manual approval: QA team approves for staging
+        - name: staging
+          environment: staging
+          policy: dev-team
+          on_approved: "✅ STAGING approved - proceeding to production"
+
+        # Manual approval: Production gate with strict policy
+        - name: production
+          environment: production
+          policy: production-gate
+          create_tag: true
+          is_final: true
+          on_approved: "🚀 PRODUCTION deployed!"
+
+      track_prs: true
+      track_commits: true
+      release_strategy:
+        type: tag
+        auto_create:
+          enabled: true
+          next_version: patch
+
+    on_approved:
+      close_issue: true
+      comment: "Release {{version}} completed successfully!"
+
+  # Fast-track deployment: All environments auto-approve except production
+  fast-track:
+    description: "Fast-track deployment for hotfixes"
+    require:
+      - policy: dev-team
+    pipeline:
+      stages:
+        - name: dev
+          environment: development
+          auto_approve: true
+          on_approved: "🤖 DEV deployed"
+
+        - name: staging
+          environment: staging
+          auto_approve: true
+          on_approved: "🤖 STAGING deployed"
+
+        - name: production
+          environment: production
+          policy: exec-approval
+          create_tag: true
+          is_final: true
+          on_approved: "🚀 PRODUCTION deployed!"
+
+    on_approved:
+      close_issue: true
+      comment: "Hotfix {{version}} deployed to production!"
+
 # Semver configuration
 semver:
   prefix: "v"

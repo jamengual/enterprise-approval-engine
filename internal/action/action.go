@@ -213,6 +213,13 @@ func (h *Handler) generatePipelineIssueBody(ctx context.Context, data *TemplateD
 	data.State.Pipeline = stageNames
 	data.State.CurrentStage = 0
 
+	// Auto-advance through initial stages marked with auto_approve: true
+	processor := NewPipelineProcessor(h)
+	autoApproved := processor.ProcessInitialAutoApproveStages(&data.State, pipeline)
+
+	// Store auto-approved stages for display/logging
+	data.State.AutoApprovedStages = autoApproved
+
 	// Store the release strategy type for display
 	data.State.ReleaseStrategy = string(pipeline.ReleaseStrategy.GetType())
 

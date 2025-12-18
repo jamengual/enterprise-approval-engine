@@ -61,15 +61,28 @@ func (p *PipelineProcessor) ProcessPipelineApproval(
 	// Move to next stage
 	state.CurrentStage++
 
+	// Collect messages from this stage and any auto-approved stages
+	var stageMessages []string
+	if stage.OnApproved != "" {
+		stageMessages = append(stageMessages, stage.OnApproved)
+	}
+
+	// Check if we should create a tag at this stage
+	shouldCreateTag := stage.CreateTag
+
+	// Auto-advance through any consecutive auto_approve stages
+	autoApprovedStages := p.processAutoApproveStages(state, pipeline, &stageMessages, &shouldCreateTag)
+
 	result := &PipelineResult{
-		StageName:     stage.Name,
-		StageIndex:    currentStage,
-		ApprovedBy:    approver,
-		StageMessage:  stage.OnApproved,
-		CreateTag:     stage.CreateTag,
-		Complete:      state.CurrentStage >= len(pipeline.Stages) || stage.IsFinal,
-		NextStage:     "",
-		NextApprovers: nil,
+		StageName:          stage.Name,
+		StageIndex:         currentStage,
+		ApprovedBy:         approver,
+		StageMessage:       strings.Join(stageMessages, "\n\n"),
+		CreateTag:          shouldCreateTag,
+		Complete:           state.CurrentStage >= len(pipeline.Stages) || p.isFinalStageReached(state, pipeline),
+		NextStage:          "",
+		NextApprovers:      nil,
+		AutoApprovedStages: autoApprovedStages,
 	}
 
 	// If not complete, get next stage info
@@ -80,6 +93,80 @@ func (p *PipelineProcessor) ProcessPipelineApproval(
 	}
 
 	return result, nil
+}
+
+// processAutoApproveStages automatically advances through stages marked with auto_approve: true.
+// Returns the list of auto-approved stage names.
+func (p *PipelineProcessor) processAutoApproveStages(
+	state *IssueState,
+	pipeline *config.PipelineConfig,
+	stageMessages *[]string,
+	shouldCreateTag *bool,
+) []string {
+	var autoApproved []string
+
+	for state.CurrentStage < len(pipeline.Stages) {
+		nextStage := pipeline.Stages[state.CurrentStage]
+
+		// Stop if this stage requires manual approval
+		if !nextStage.AutoApprove {
+			break
+		}
+
+		// Auto-approve this stage
+		completion := StageCompletion{
+			Stage:      nextStage.Name,
+			ApprovedBy: "[auto]",
+			ApprovedAt: time.Now().UTC().Format(time.RFC3339),
+		}
+		state.StageHistory = append(state.StageHistory, completion)
+		autoApproved = append(autoApproved, nextStage.Name)
+
+		// Collect the stage message
+		if nextStage.OnApproved != "" {
+			*stageMessages = append(*stageMessages, fmt.Sprintf("🤖 **%s** (auto-approved): %s", strings.ToUpper(nextStage.Name), nextStage.OnApproved))
+		}
+
+		// Check if this stage should create a tag
+		if nextStage.CreateTag {
+			*shouldCreateTag = true
+		}
+
+		// Advance to next stage
+		state.CurrentStage++
+
+		// Stop if this was a final stage
+		if nextStage.IsFinal {
+			break
+		}
+	}
+
+	return autoApproved
+}
+
+// isFinalStageReached checks if any completed stage was marked as final.
+func (p *PipelineProcessor) isFinalStageReached(state *IssueState, pipeline *config.PipelineConfig) bool {
+	for i, stage := range pipeline.Stages {
+		if i < state.CurrentStage && stage.IsFinal {
+			return true
+		}
+	}
+	return false
+}
+
+// ProcessInitialAutoApproveStages auto-advances through initial stages marked auto_approve: true
+// when creating a new pipeline issue. Returns the list of auto-approved stage names.
+func (p *PipelineProcessor) ProcessInitialAutoApproveStages(
+	state *IssueState,
+	pipeline *config.PipelineConfig,
+) []string {
+	var autoApproved []string
+	var shouldCreateTag bool
+	var stageMessages []string
+
+	autoApproved = p.processAutoApproveStages(state, pipeline, &stageMessages, &shouldCreateTag)
+
+	return autoApproved
 }
 
 // GetCurrentStageRequirement returns the approval requirement for the current pipeline stage.
@@ -143,14 +230,28 @@ func GeneratePipelineTable(state *IssueState, pipeline *config.PipelineConfig) s
 		approver := "-"
 		timestamp := "-"
 
+		// Mark auto-approve stages with a robot emoji when pending
+		if stage.AutoApprove && i >= state.CurrentStage {
+			status = "🤖 Auto"
+		}
+
 		if completion, ok := completedMap[stage.Name]; ok {
-			status = "✅ Deployed"
-			approver = "@" + completion.ApprovedBy
+			if completion.ApprovedBy == "[auto]" {
+				status = "🤖 Auto-deployed"
+				approver = "auto"
+			} else {
+				status = "✅ Deployed"
+				approver = "@" + completion.ApprovedBy
+			}
 			if t, err := time.Parse(time.RFC3339, completion.ApprovedAt); err == nil {
 				timestamp = t.Format("Jan 2 15:04")
 			}
 		} else if i == state.CurrentStage {
-			status = "⏳ Awaiting"
+			if stage.AutoApprove {
+				status = "🤖 Auto (next)"
+			} else {
+				status = "⏳ Awaiting"
+			}
 		}
 
 		sb.WriteString(fmt.Sprintf("| %s | %s | %s | %s |\n",
@@ -203,14 +304,15 @@ func GenerateCommitList(commits []CommitInfo) string {
 
 // PipelineResult contains the result of processing a pipeline approval.
 type PipelineResult struct {
-	StageName     string   // Name of the stage that was approved
-	StageIndex    int      // Index of the stage
-	ApprovedBy    string   // Who approved
-	StageMessage  string   // Message to post for this stage
-	CreateTag     bool     // Whether to create a tag at this stage
-	Complete      bool     // Whether the pipeline is complete
-	NextStage     string   // Name of the next stage (if not complete)
-	NextApprovers []string // Approvers for the next stage
+	StageName          string   // Name of the stage that was approved
+	StageIndex         int      // Index of the stage
+	ApprovedBy         string   // Who approved
+	StageMessage       string   // Message to post for this stage
+	CreateTag          bool     // Whether to create a tag at this stage
+	Complete           bool     // Whether the pipeline is complete
+	NextStage          string   // Name of the next stage (if not complete)
+	NextApprovers      []string // Approvers for the next stage
+	AutoApprovedStages []string // Stages that were automatically approved after this one
 }
 
 // EvaluatePipelineStage evaluates whether the current user can approve the current stage.

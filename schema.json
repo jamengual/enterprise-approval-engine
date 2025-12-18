@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://raw.githubusercontent.com/RogueCloud/issueops-approvals/main/schema.json",
+  "$id": "https://raw.githubusercontent.com/jamengual/enterprise-approval-engine/main/schema.json",
   "title": "IssueOps Approvals Configuration",
   "description": "Configuration schema for IssueOps Approvals action",
   "type": "object",
@@ -204,6 +204,127 @@
         },
         "on_closed": {
           "$ref": "#/definitions/onClosedConfig"
+        },
+        "pipeline": {
+          "$ref": "#/definitions/pipelineConfig"
+        }
+      }
+    },
+    "pipelineConfig": {
+      "type": "object",
+      "description": "Progressive deployment pipeline configuration",
+      "required": ["stages"],
+      "properties": {
+        "stages": {
+          "type": "array",
+          "description": "Ordered list of deployment stages",
+          "items": {
+            "$ref": "#/definitions/pipelineStage"
+          }
+        },
+        "track_prs": {
+          "type": "boolean",
+          "description": "Include PRs in release tracking",
+          "default": false
+        },
+        "track_commits": {
+          "type": "boolean",
+          "description": "Include commits in release tracking",
+          "default": false
+        },
+        "compare_from_tag": {
+          "type": "string",
+          "description": "Tag pattern to compare from (e.g., 'v*')"
+        },
+        "release_strategy": {
+          "$ref": "#/definitions/releaseStrategy"
+        }
+      }
+    },
+    "pipelineStage": {
+      "type": "object",
+      "description": "A single stage in a deployment pipeline",
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Stage name (e.g., 'dev', 'qa', 'prod')"
+        },
+        "environment": {
+          "type": "string",
+          "description": "GitHub environment name"
+        },
+        "policy": {
+          "type": "string",
+          "description": "Approval policy for this stage"
+        },
+        "approvers": {
+          "type": "array",
+          "description": "Inline approvers (alternative to policy)",
+          "items": { "type": "string" }
+        },
+        "on_approved": {
+          "type": "string",
+          "description": "Comment to post when stage is approved"
+        },
+        "create_tag": {
+          "type": "boolean",
+          "description": "Create a git tag at this stage",
+          "default": false
+        },
+        "is_final": {
+          "type": "boolean",
+          "description": "Close issue after this stage",
+          "default": false
+        },
+        "auto_approve": {
+          "type": "boolean",
+          "description": "Automatically approve this stage without human intervention",
+          "default": false
+        }
+      }
+    },
+    "releaseStrategy": {
+      "type": "object",
+      "description": "Release candidate selection strategy",
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "Strategy type",
+          "enum": ["tag", "branch", "label", "milestone"],
+          "default": "tag"
+        },
+        "branch": {
+          "type": "object",
+          "properties": {
+            "pattern": { "type": "string" },
+            "base_branch": { "type": "string" },
+            "delete_after_release": { "type": "boolean" }
+          }
+        },
+        "label": {
+          "type": "object",
+          "properties": {
+            "pattern": { "type": "string" },
+            "pending_label": { "type": "string" },
+            "remove_after_release": { "type": "boolean" }
+          }
+        },
+        "milestone": {
+          "type": "object",
+          "properties": {
+            "pattern": { "type": "string" },
+            "close_after_release": { "type": "boolean" }
+          }
+        },
+        "auto_create": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "next_version": { "type": "string", "enum": ["patch", "minor", "major"] },
+            "create_issue": { "type": "boolean" },
+            "comment": { "type": "string" }
+          }
         }
       }
     },

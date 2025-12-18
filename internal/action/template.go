@@ -39,6 +39,9 @@ type IssueState struct {
 	// Release strategy fields
 	ReleaseStrategy   string `json:"release_strategy,omitempty"`   // Strategy used: "tag", "branch", "label", "milestone"
 	ReleaseIdentifier string `json:"release_identifier,omitempty"` // e.g., branch name, label, milestone title
+
+	// Auto-approval tracking
+	AutoApprovedStages []string `json:"auto_approved_stages,omitempty"` // Stages that were automatically approved
 }
 
 // StageCompletion records when a stage was completed.

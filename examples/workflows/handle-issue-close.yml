@@ -16,7 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: RogueCloud/issueops-approvals@v1
+      - uses: jamengual/enterprise-approval-engine@v1
         id: close
         with:
           action: close-issue

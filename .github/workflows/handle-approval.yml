@@ -25,7 +25,7 @@ jobs:
           action: process-comment
           issue_number: ${{ github.event.issue.number }}
           token: ${{ secrets.GITHUB_TOKEN }}
-          config_repo: RogueCloud/.github
+          config_repo: jamengual/.github
 
       - name: Handle Result
         env:

@@ -97,7 +97,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: RogueCloud/issueops-approvals@v1
+      - uses: jamengual/enterprise-approval-engine@v1
         id: approval
         with:
           action: request
@@ -128,7 +128,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: RogueCloud/issueops-approvals@v1
+      - uses: jamengual/enterprise-approval-engine@v1
         id: process
         with:
           action: process-comment
@@ -707,6 +707,7 @@ semver: { ... }               # Optional: version handling settings
 | `on_approved` | string | - | Comment to post when stage is approved |
 | `create_tag` | bool | `false` | Create a git tag at this stage |
 | `is_final` | bool | `false` | Close issue after this stage |
+| `auto_approve` | bool | `false` | Automatically approve without human intervention |
 
 ### `workflows.<name>.pipeline.release_strategy` Options
 
@@ -799,7 +800,7 @@ jobs:
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
       # Use the app token for team membership checks
-      - uses: RogueCloud/issueops-approvals@v1
+      - uses: jamengual/enterprise-approval-engine@v1
         with:
           action: process-comment
           issue_number: ${{ github.event.issue.number }}
@@ -899,7 +900,7 @@ jobs:
         with:
           fetch-depth: 0  # Needed for commit/PR comparison
 
-      - uses: RogueCloud/issueops-approvals@v1
+      - uses: jamengual/enterprise-approval-engine@v1
         id: approval
         with:
           action: request
@@ -978,6 +979,51 @@ jobs:
 | `on_approved` | Message to post when stage is approved |
 | `create_tag` | Create a git tag at this stage |
 | `is_final` | Close the issue after this stage |
+| `auto_approve` | Automatically approve this stage without human intervention |
+
+#### Auto-Approve for Lower Environments
+
+Use `auto_approve: true` on pipeline stages that should be automatically approved without human intervention. This is ideal for lower environments like `dev` or `integration` where you want to speed up the pipeline while still maintaining approval gates for production.
+
+**Example with auto-approve:**
+
+```yaml
+workflows:
+  deploy:
+    description: "Deploy through environments"
+    pipeline:
+      stages:
+        - name: dev
+          environment: development
+          auto_approve: true              # Automatically approved
+          on_approved: "🤖 DEV auto-deployed"
+        - name: integration
+          environment: integration
+          auto_approve: true              # Automatically approved
+          on_approved: "🤖 INTEGRATION auto-deployed"
+        - name: staging
+          environment: staging
+          policy: qa-team                 # Requires manual approval
+          on_approved: "✅ STAGING approved"
+        - name: production
+          environment: production
+          policy: production-approvers    # Requires manual approval
+          create_tag: true
+          is_final: true
+```
+
+**How it works:**
+
+1. When a pipeline issue is created, all initial `auto_approve: true` stages are automatically completed
+2. When a stage is manually approved, any consecutive `auto_approve: true` stages that follow are also automatically completed
+3. Auto-approved stages show with 🤖 indicator in the pipeline table
+4. The approver is recorded as `[auto]` in the stage history
+
+**Use cases:**
+
+- **Development environments**: Deploy immediately without waiting for approval
+- **Integration testing**: Let CI/CD pipeline progress automatically through test environments
+- **Canary deployments**: Auto-approve canary stage, require approval for full rollout
 
 #### Pipeline Config Options
 
@@ -1239,7 +1285,7 @@ Automatically extract Jira issues from commits and branch names. The action supp
 Just provide `jira_base_url` to extract issue keys and display them as clickable links:
 
 ```yaml
-- uses: RogueCloud/issueops-approvals@v1
+- uses: jamengual/enterprise-approval-engine@v1
   with:
     action: request
     workflow: production-deploy
@@ -1261,7 +1307,7 @@ This extracts issue keys (e.g., `PROJ-123`) from commit messages and branch name
 Add credentials to also fetch issue details and update Fix Versions:
 
 ```yaml
-- uses: RogueCloud/issueops-approvals@v1
+- uses: jamengual/enterprise-approval-engine@v1
   with:
     action: request
     workflow: production-deploy
@@ -1309,7 +1355,7 @@ This displays rich issue information:
 Create GitHub deployments for visibility in GitHub's deployment dashboard. This works independently of the `environment:` key in workflow YAML.
 
 ```yaml
-- uses: RogueCloud/issueops-approvals@v1
+- uses: jamengual/enterprise-approval-engine@v1
   id: approval
   with:
     action: request
@@ -1342,7 +1388,7 @@ Create GitHub deployments for visibility in GitHub's deployment dashboard. This 
 Store approval configs in a shared repository for centralized policy management:
 
 ```yaml
-- uses: RogueCloud/issueops-approvals@v1
+- uses: jamengual/enterprise-approval-engine@v1
   with:
     action: request
     workflow: production-deploy
@@ -1386,7 +1432,7 @@ jobs:
       issue_number: ${{ steps.request.outputs.issue_number }}
     steps:
       - uses: actions/checkout@v4
-      - uses: RogueCloud/issueops-approvals@v1
+      - uses: jamengual/enterprise-approval-engine@v1
         id: request
         with:
           action: request
@@ -1402,7 +1448,7 @@ jobs:
       tag: ${{ steps.check.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
-      - uses: RogueCloud/issueops-approvals@v1
+      - uses: jamengual/enterprise-approval-engine@v1
         id: check
         with:
           action: check
@@ -1455,7 +1501,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: RogueCloud/issueops-approvals@v1
+      - uses: jamengual/enterprise-approval-engine@v1
         id: close
         with:
           action: close-issue
@@ -1509,7 +1555,7 @@ jobs:
         with:
           fetch-depth: 0  # Needed for commit comparison
 
-      - uses: RogueCloud/issueops-approvals@v1
+      - uses: jamengual/enterprise-approval-engine@v1
         id: approval
         with:
           action: request
@@ -1564,7 +1610,7 @@ jobs:
           app-id: ${{ vars.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
-      - uses: RogueCloud/issueops-approvals@v1
+      - uses: jamengual/enterprise-approval-engine@v1
         id: process
         with:
           action: process-comment
@@ -1661,7 +1707,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: RogueCloud/issueops-approvals@v1
+      - uses: jamengual/enterprise-approval-engine@v1
         id: request
         with:
           action: request
@@ -1670,7 +1716,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           jira_base_url: https://mycompany.atlassian.net
 
-      - uses: RogueCloud/issueops-approvals@v1
+      - uses: jamengual/enterprise-approval-engine@v1
         id: check
         with:
           action: check
@@ -1713,7 +1759,7 @@ Validate your configuration using the JSON schema:
 
 ```yaml
 # .github/approvals.yml
-# yaml-language-server: $schema=https://raw.githubusercontent.com/RogueCloud/issueops-approvals/main/schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/jamengual/enterprise-approval-engine/main/schema.json
 
 version: 1
 
