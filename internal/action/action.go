@@ -400,13 +400,6 @@ const (
 	ReactionRocket   ReactionType = "rocket"   // 🚀 - deployed
 )
 
-// addReactionToComment adds an emoji reaction to a comment if configured.
-func (h *Handler) addReactionToComment(ctx context.Context, commentID int64, reaction ReactionType, settings *config.CommentSettings) {
-	if settings.ShouldReactToComments() {
-		_ = h.client.AddReaction(ctx, commentID, string(reaction))
-	}
-}
-
 // addCommentReaction adds an appropriate reaction based on the approval result.
 func (h *Handler) addCommentReaction(ctx context.Context, commentID int64, result *approval.ApprovalResult, settings *config.CommentSettings) {
 	if !settings.ShouldReactToComments() {

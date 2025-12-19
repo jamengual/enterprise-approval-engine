@@ -56,7 +56,9 @@ func TestListSubIssues(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(subIssues)
+		if err := json.NewEncoder(w).Encode(subIssues); err != nil {
+			t.Errorf("failed to encode response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -84,7 +86,9 @@ func TestGetParentIssue(t *testing.T) {
 			}
 
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(parent)
+			if err := json.NewEncoder(w).Encode(parent); err != nil {
+				t.Errorf("failed to encode response: %v", err)
+			}
 		}))
 		defer server.Close()
 
@@ -144,7 +148,9 @@ func TestIsSubIssue(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			parent := &github.Issue{Number: github.Int(1)}
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(parent)
+			if err := json.NewEncoder(w).Encode(parent); err != nil {
+				t.Errorf("failed to encode response: %v", err)
+			}
 		}))
 		defer server.Close()
 
