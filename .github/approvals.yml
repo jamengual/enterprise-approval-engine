@@ -38,6 +38,7 @@ workflows:
     pipeline:
       track_prs: true
       track_commits: true
+      show_mermaid_diagram: true  # Show visual flowchart (default: true)
       stages:
         - name: dev
           environment: development

@@ -226,6 +226,7 @@ workflows:
     require:
       - policy: dev-team  # Fallback if not using pipeline
     pipeline:
+      show_mermaid_diagram: true  # Show visual flowchart (default: true)
       stages:
         # Auto-approve: Deploy to dev immediately
         - name: dev

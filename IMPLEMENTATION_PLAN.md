@@ -596,6 +596,62 @@ workflows:
 
 ---
 
+## Stage 13: Pipeline Visualization (Mermaid Diagrams)
+**Goal**: Add visual flowchart diagrams to pipeline approval issues
+**Success Criteria**:
+- Mermaid diagram shows pipeline stages with colored nodes
+- Colors update based on stage status (completed, current, pending, auto-approve)
+- Can be disabled via configuration
+
+**Tests**:
+- Generate diagram with all stages pending
+- Generate diagram with completed stages
+- Generate diagram with auto-approve stages
+- Generate diagram when disabled (returns empty string)
+
+**Status**: Complete
+
+### Implementation
+
+#### Files Modified:
+- `internal/action/pipeline.go` - Added `GeneratePipelineMermaid()` function
+- `internal/action/template.go` - Added `PipelineMermaid` field to `TemplateData`
+- `internal/config/types.go` - Added `ShowMermaidDiagram` option to `PipelineConfig`
+
+#### Key Functions:
+```go
+// GeneratePipelineMermaid generates a Mermaid flowchart for the pipeline
+func GeneratePipelineMermaid(state *IssueState, pipeline *config.PipelineConfig) string
+
+// ShouldShowMermaidDiagram returns whether to show the diagram (default: true)
+func (p *PipelineConfig) ShouldShowMermaidDiagram() bool
+```
+
+#### Color Scheme:
+| Status | Color | Hex Code |
+|--------|-------|----------|
+| Completed | Green | `#28a745` |
+| Current | Yellow/Amber | `#ffc107` |
+| Pending | Gray | `#6c757d` |
+| Auto-approve | Cyan | `#17a2b8` |
+
+#### Emojis in Labels:
+- ✅ - Completed (manual approval)
+- 🤖 - Auto-approved or auto-approve pending
+- ⏳ - Current stage awaiting approval
+- ⬜ - Pending future stages
+
+#### Configuration:
+```yaml
+pipeline:
+  show_mermaid_diagram: true  # Default: true
+  stages:
+    - name: dev
+    - name: prod
+```
+
+---
+
 ## Future Enhancements
 
 ### Planned Features

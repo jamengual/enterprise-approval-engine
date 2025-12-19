@@ -8,6 +8,7 @@ Enterprise-grade GitHub Action for policy-based approval workflows with per-grou
 - **OR Logic Between Groups**: Multiple approval paths - any one group meeting requirements approves the request
 - **Mixed Approvers**: Combine individual users and GitHub teams in the same group
 - **Progressive Deployment Pipelines**: Single-issue tracking through multiple environments (dev → qa → stage → prod)
+- **Pipeline Visualization**: Color-coded Mermaid flowchart diagrams showing deployment progress
 - **PR and Commit Tracking**: Automatically list PRs and commits in deployment issues for release management
 - **Semver Tag Creation**: Automatically create git tags upon approval
 - **Policy-Based Configuration**: Define reusable approval policies in YAML
@@ -496,7 +497,8 @@ You can fully customize the issue body using Go templates. Use `body` for inline
 | `{{.HasJiraIssues}}` | Boolean - whether Jira issues exist |
 | `{{.JiraIssues}}` | Array of Jira issue data |
 | `{{.JiraIssuesTable}}` | Pre-rendered Jira issues table |
-| `{{.PipelineTable}}` | Pre-rendered deployment pipeline |
+| `{{.PipelineTable}}` | Pre-rendered deployment pipeline table |
+| `{{.PipelineMermaid}}` | Pre-rendered Mermaid flowchart diagram |
 | `{{.Vars.key}}` | Custom variables |
 
 **Template functions:**
@@ -694,6 +696,7 @@ semver: { ... }               # Optional: version handling settings
 | `track_prs` | bool | `false` | Include merged PRs in issue body |
 | `track_commits` | bool | `false` | Include commits in issue body |
 | `compare_from_tag` | string | - | Tag pattern to compare from (e.g., `"v*"`) |
+| `show_mermaid_diagram` | bool | `true` | Show visual Mermaid flowchart of pipeline stages |
 | `release_strategy` | object | - | Release candidate selection strategy |
 
 ### `workflows.<name>.pipeline.stages[]` Options
@@ -917,10 +920,27 @@ jobs:
 
 #### How It Works
 
-1. **Issue Creation**: When triggered, creates a single issue showing all stages with a progress table:
+1. **Issue Creation**: When triggered, creates a single issue showing all stages with a visual Mermaid diagram and progress table:
 
 ```markdown
 ## 🚀 Deployment Pipeline: v1.2.0
+
+### Pipeline Flow
+
+​```mermaid
+flowchart LR
+    DEV(⏳ DEV)
+    QA(⬜ QA)
+    STAGE(⬜ STAGE)
+    PROD(⬜ PROD)
+    DEV --> QA --> STAGE --> PROD
+
+    classDef completed fill:#28a745,stroke:#1e7e34,color:#fff
+    classDef current fill:#ffc107,stroke:#d39e00,color:#000
+    classDef pending fill:#6c757d,stroke:#545b62,color:#fff
+    class DEV current
+    class QA,STAGE,PROD pending
+​```
 
 ### Deployment Progress
 
@@ -934,7 +954,15 @@ jobs:
 **Current Stage:** DEV
 ```
 
-2. **Stage Progression**: Comment `approve` to advance to the next stage. The table updates automatically:
+The Mermaid diagram provides an at-a-glance view with color-coded nodes:
+- 🟢 **Green** - Completed stages
+- 🟡 **Yellow** - Current stage awaiting approval
+- ⚪ **Gray** - Pending stages
+- 🔵 **Cyan** - Auto-approve stages
+
+To disable the Mermaid diagram, set `show_mermaid_diagram: false` in the pipeline config.
+
+2. **Stage Progression**: Comment `approve` to advance to the next stage. Both the diagram and table update automatically:
 
 ```markdown
 | Stage | Status | Approver | Time |
@@ -1027,11 +1055,12 @@ workflows:
 
 #### Pipeline Config Options
 
-| Option | Description |
-|--------|-------------|
-| `track_prs` | Include merged PRs in the issue body |
-| `track_commits` | Include commits since last tag |
-| `compare_from_tag` | Custom tag pattern to compare from |
+| Option | Default | Description |
+|--------|---------|-------------|
+| `track_prs` | `false` | Include merged PRs in the issue body |
+| `track_commits` | `false` | Include commits since last tag |
+| `compare_from_tag` | - | Custom tag pattern to compare from |
+| `show_mermaid_diagram` | `true` | Show visual Mermaid flowchart of pipeline stages |
 
 **Note:** PR tracking requires `pull-requests: read` permission in your workflow.
 
