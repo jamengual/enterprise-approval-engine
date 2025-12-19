@@ -170,7 +170,7 @@ const (
 type SubIssueSettings struct {
 	// TitleTemplate is the template for sub-issue titles.
 	// Available variables: {{stage}}, {{version}}, {{workflow}}, {{environment}}
-	// Default: "✅ Approve: {{stage}} for {{version}}"
+	// Default: "⏳ Approve: {{stage}} for {{version}}" (changes to ✅ when approved)
 	TitleTemplate string `yaml:"title_template,omitempty"`
 
 	// BodyTemplate is the template for sub-issue body content.
@@ -199,9 +199,10 @@ type SubIssueProtection struct {
 }
 
 // GetTitleTemplate returns the title template with a sensible default.
+// Uses ⏳ for pending approval, which changes to ✅ when approved.
 func (s *SubIssueSettings) GetTitleTemplate() string {
 	if s == nil || s.TitleTemplate == "" {
-		return "✅ Approve: {{stage}} for {{version}}"
+		return "⏳ Approve: {{stage}} for {{version}}"
 	}
 	return s.TitleTemplate
 }

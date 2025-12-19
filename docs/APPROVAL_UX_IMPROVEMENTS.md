@@ -225,7 +225,7 @@ workflows:
           is_final: true
 
     sub_issue_settings:  # NEW: Optional customization
-      title_template: "✅ Approve: {{stage}} for {{version}}"
+      title_template: "⏳ Approve: {{stage}} for {{version}}"  # ✅ when approved
       body_template: |
         ## Approval Request
 
@@ -619,7 +619,7 @@ workflows:
     # Sub-issue approvals (Phase 2)
     approval_mode: sub_issues    # "comments" (default), "sub_issues", or "hybrid"
     sub_issue_settings:
-      title_template: "✅ Approve: {{stage}} for {{version}}"
+      title_template: "⏳ Approve: {{stage}} for {{version}}"  # ✅ when approved
       labels: [approval-stage]
       auto_close_remaining: true  # Close other sub-issues on denial
       protection:

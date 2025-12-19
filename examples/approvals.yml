@@ -308,8 +308,8 @@ workflows:
     # Enable sub-issues mode
     approval_mode: sub_issues
     sub_issue_settings:
-      # Template for sub-issue titles
-      title_template: "✅ Approve: {{stage}} deployment for {{version}}"
+      # Template for sub-issue titles (⏳ changes to ✅ when approved)
+      title_template: "⏳ Approve: {{stage}} deployment for {{version}}"
       # Additional labels for sub-issues
       labels:
         - approval-stage

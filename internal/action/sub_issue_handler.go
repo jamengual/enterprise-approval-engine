@@ -264,6 +264,9 @@ func (h *SubIssueHandler) ProcessSubIssueClose(
 	subIssue.ClosedAt = time.Now().UTC().Format(time.RFC3339)
 	state.SubIssues[subIssueIdx] = *subIssue
 
+	// Update the sub-issue title to reflect approved/denied status
+	h.updateSubIssueTitleOnClose(ctx, input.IssueNumber, subIssue.Stage, state.Version, output.Status)
+
 	// Record stage completion
 	if output.Status == "approved" {
 		state.StageHistory = append(state.StageHistory, StageCompletion{
@@ -470,4 +473,24 @@ func (h *SubIssueHandler) ValidateParentIssueClose(
 	}
 
 	return true, ""
+}
+
+// updateSubIssueTitleOnClose updates the sub-issue title to reflect approved/denied status.
+// Changes ⏳ to ✅ (approved) or ❌ (denied).
+func (h *SubIssueHandler) updateSubIssueTitleOnClose(
+	ctx context.Context,
+	issueNumber int,
+	stage string,
+	version string,
+	status string,
+) {
+	var newTitle string
+	if status == "denied" {
+		newTitle = fmt.Sprintf("❌ Denied: %s deployment for %s", strings.ToUpper(stage), version)
+	} else {
+		newTitle = fmt.Sprintf("✅ Approved: %s deployment for %s", strings.ToUpper(stage), version)
+	}
+
+	// Ignore errors - title update is cosmetic
+	_ = h.client.UpdateIssueTitle(ctx, issueNumber, newTitle)
 }

@@ -734,7 +734,7 @@ workflows:
   deploy:
     approval_mode: sub_issues
     sub_issue_settings:
-      title_template: "✅ Approve: {{stage}} for {{version}}"
+      title_template: "⏳ Approve: {{stage}} for {{version}}"  # ✅ when approved
       labels: [approval-stage]
       protection:
         only_assignee_can_close: true

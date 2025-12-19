@@ -81,6 +81,16 @@ func (c *Client) UpdateIssueBody(ctx context.Context, number int, body string) e
 	return nil
 }
 
+// UpdateIssueTitle updates the title of an issue.
+func (c *Client) UpdateIssueTitle(ctx context.Context, number int, title string) error {
+	req := &github.IssueRequest{Title: &title}
+	_, _, err := c.client.Issues.Edit(ctx, c.owner, c.repo, number, req)
+	if err != nil {
+		return fmt.Errorf("failed to update issue title %d: %w", number, err)
+	}
+	return nil
+}
+
 // CloseIssue closes an issue.
 func (c *Client) CloseIssue(ctx context.Context, number int) error {
 	state := "closed"

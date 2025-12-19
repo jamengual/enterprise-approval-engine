@@ -39,7 +39,7 @@ workflows:
     # Use sub-issues for approvals - each stage gets its own issue
     approval_mode: sub_issues
     sub_issue_settings:
-      title_template: "✅ Approve: {{stage}} deployment for {{version}}"
+      title_template: "⏳ Approve: {{stage}} deployment for {{version}}"
       labels:
         - approval-stage
         - needs-review
