@@ -422,6 +422,10 @@ func TestGeneratePipelineMermaid(t *testing.T) {
 	if !strings.Contains(mermaid, "⏳ STAGING") {
 		t.Error("Expected awaiting emoji in STAGING label")
 	}
+	// Check pending stages have pending emoji
+	if !strings.Contains(mermaid, "⬜ PRODUCTION") {
+		t.Error("Expected pending emoji in PRODUCTION label")
+	}
 }
 
 func TestGeneratePipelineMermaid_Empty(t *testing.T) {

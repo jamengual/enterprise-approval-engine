@@ -408,6 +408,7 @@ func GeneratePipelineMermaid(state *IssueState, pipeline *config.PipelineConfig)
 			nodeLabel = "🤖 " + nodeLabel
 			autoApprove = append(autoApprove, nodeID)
 		} else {
+			nodeLabel = "⬜ " + nodeLabel
 			pending = append(pending, nodeID)
 		}
 
