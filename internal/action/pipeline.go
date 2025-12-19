@@ -459,12 +459,14 @@ func GeneratePipelineIssueBody(data *TemplateData, state *IssueState, pipeline *
 	sb.WriteString(fmt.Sprintf("## 🚀 Deployment Pipeline: %s\n\n", data.Version))
 	sb.WriteString(fmt.Sprintf("%s\n\n", data.Description))
 
-	// Pipeline Mermaid diagram for visual flow
-	mermaidDiagram := GeneratePipelineMermaid(state, pipeline)
-	if mermaidDiagram != "" {
-		sb.WriteString("### Pipeline Flow\n\n")
-		sb.WriteString(mermaidDiagram)
-		sb.WriteString("\n")
+	// Pipeline Mermaid diagram for visual flow (if enabled)
+	if pipeline.ShouldShowMermaidDiagram() {
+		mermaidDiagram := GeneratePipelineMermaid(state, pipeline)
+		if mermaidDiagram != "" {
+			sb.WriteString("### Pipeline Flow\n\n")
+			sb.WriteString(mermaidDiagram)
+			sb.WriteString("\n")
+		}
 	}
 
 	// Pipeline status table

@@ -526,3 +526,76 @@ func TestGeneratePipelineMermaid_AllComplete(t *testing.T) {
 		}
 	}
 }
+
+func TestGeneratePipelineIssueBody_MermaidDisabled(t *testing.T) {
+	showMermaid := false
+	pipeline := &config.PipelineConfig{
+		ShowMermaidDiagram: &showMermaid,
+		Stages: []config.PipelineStage{
+			{Name: "dev"},
+			{Name: "prod"},
+		},
+	}
+
+	state := &IssueState{
+		Workflow:     "deploy",
+		Version:      "v1.0.0",
+		Requestor:    "alice",
+		CurrentStage: 0,
+	}
+
+	data := &TemplateData{
+		Version:     "v1.0.0",
+		Description: "Deploy",
+		Requestor:   "alice",
+		CreatedAt:   time.Now().Format(time.RFC3339),
+	}
+
+	body := GeneratePipelineIssueBody(data, state, pipeline)
+
+	// Should NOT contain Mermaid diagram when disabled
+	if strings.Contains(body, "```mermaid") {
+		t.Error("Should not contain Mermaid diagram when show_mermaid_diagram is false")
+	}
+	if strings.Contains(body, "Pipeline Flow") {
+		t.Error("Should not contain Pipeline Flow section when Mermaid is disabled")
+	}
+	// Should still have the status table
+	if !strings.Contains(body, "Deployment Progress") {
+		t.Error("Should still contain Deployment Progress table")
+	}
+}
+
+func TestGeneratePipelineIssueBody_MermaidEnabledByDefault(t *testing.T) {
+	// Don't set ShowMermaidDiagram - it should default to true
+	pipeline := &config.PipelineConfig{
+		Stages: []config.PipelineStage{
+			{Name: "dev"},
+			{Name: "prod"},
+		},
+	}
+
+	state := &IssueState{
+		Workflow:     "deploy",
+		Version:      "v1.0.0",
+		Requestor:    "alice",
+		CurrentStage: 0,
+	}
+
+	data := &TemplateData{
+		Version:     "v1.0.0",
+		Description: "Deploy",
+		Requestor:   "alice",
+		CreatedAt:   time.Now().Format(time.RFC3339),
+	}
+
+	body := GeneratePipelineIssueBody(data, state, pipeline)
+
+	// Should contain Mermaid diagram by default
+	if !strings.Contains(body, "```mermaid") {
+		t.Error("Should contain Mermaid diagram by default")
+	}
+	if !strings.Contains(body, "Pipeline Flow") {
+		t.Error("Should contain Pipeline Flow section by default")
+	}
+}

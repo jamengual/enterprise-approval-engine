@@ -107,9 +107,22 @@ type PipelineConfig struct {
 	TrackCommits   bool            `yaml:"track_commits,omitempty"`    // Include commits in release tracking
 	CompareFromTag string          `yaml:"compare_from_tag,omitempty"` // Tag pattern to compare from (e.g., "v*")
 
+	// ShowMermaidDiagram controls whether to show a Mermaid flowchart diagram
+	// visualizing the pipeline stages in the approval issue. Defaults to true.
+	ShowMermaidDiagram *bool `yaml:"show_mermaid_diagram,omitempty"`
+
 	// ReleaseStrategy defines how release candidates are selected.
 	// Supports: "tag" (default), "branch", "label", "milestone"
 	ReleaseStrategy ReleaseStrategyConfig `yaml:"release_strategy,omitempty"`
+}
+
+// ShouldShowMermaidDiagram returns whether to show the Mermaid diagram.
+// Defaults to true if not explicitly set.
+func (p *PipelineConfig) ShouldShowMermaidDiagram() bool {
+	if p.ShowMermaidDiagram == nil {
+		return true // default: show the diagram
+	}
+	return *p.ShowMermaidDiagram
 }
 
 // PipelineStage defines a single stage in a deployment pipeline.
