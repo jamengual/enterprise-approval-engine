@@ -363,12 +363,108 @@ func (p *PipelineProcessor) EvaluatePipelineStage(
 	return engine.Evaluate(req)
 }
 
+// GeneratePipelineMermaid generates a Mermaid flowchart diagram for the pipeline.
+// The diagram shows stages with colors based on their status:
+// - Completed stages: green
+// - Current stage: amber/yellow
+// - Pending stages: gray
+// - Auto-approve stages: cyan (when pending)
+func GeneratePipelineMermaid(state *IssueState, pipeline *config.PipelineConfig) string {
+	if pipeline == nil || len(pipeline.Stages) == 0 {
+		return ""
+	}
+
+	var sb strings.Builder
+
+	// Start the Mermaid diagram
+	sb.WriteString("```mermaid\n")
+	sb.WriteString("flowchart LR\n")
+
+	// Build the completed stages map
+	completedMap := make(map[string]StageCompletion)
+	for _, c := range state.StageHistory {
+		completedMap[c.Stage] = c
+	}
+
+	// Generate node definitions with connections
+	var completed, current, pending, autoApprove []string
+
+	for i, stage := range pipeline.Stages {
+		nodeID := strings.ToUpper(stage.Name)
+		nodeLabel := strings.ToUpper(stage.Name)
+
+		// Add emoji based on status
+		if completion, ok := completedMap[stage.Name]; ok {
+			if completion.ApprovedBy == "[auto]" {
+				nodeLabel = "🤖 " + nodeLabel
+			} else {
+				nodeLabel = "✅ " + nodeLabel
+			}
+			completed = append(completed, nodeID)
+		} else if i == state.CurrentStage {
+			nodeLabel = "⏳ " + nodeLabel
+			current = append(current, nodeID)
+		} else if stage.AutoApprove {
+			nodeLabel = "🤖 " + nodeLabel
+			autoApprove = append(autoApprove, nodeID)
+		} else {
+			pending = append(pending, nodeID)
+		}
+
+		// Write the node definition
+		sb.WriteString(fmt.Sprintf("    %s(%s)\n", nodeID, nodeLabel))
+	}
+
+	// Add connections between stages
+	sb.WriteString("    ")
+	for i, stage := range pipeline.Stages {
+		nodeID := strings.ToUpper(stage.Name)
+		if i > 0 {
+			sb.WriteString(" --> ")
+		}
+		sb.WriteString(nodeID)
+	}
+	sb.WriteString("\n\n")
+
+	// Define the style classes with colors
+	sb.WriteString("    classDef completed fill:#28a745,stroke:#1e7e34,color:#fff\n")
+	sb.WriteString("    classDef current fill:#ffc107,stroke:#d39e00,color:#000\n")
+	sb.WriteString("    classDef pending fill:#6c757d,stroke:#545b62,color:#fff\n")
+	sb.WriteString("    classDef autoApprove fill:#17a2b8,stroke:#117a8b,color:#fff\n")
+
+	// Apply styles to nodes
+	if len(completed) > 0 {
+		sb.WriteString(fmt.Sprintf("    class %s completed\n", strings.Join(completed, ",")))
+	}
+	if len(current) > 0 {
+		sb.WriteString(fmt.Sprintf("    class %s current\n", strings.Join(current, ",")))
+	}
+	if len(pending) > 0 {
+		sb.WriteString(fmt.Sprintf("    class %s pending\n", strings.Join(pending, ",")))
+	}
+	if len(autoApprove) > 0 {
+		sb.WriteString(fmt.Sprintf("    class %s autoApprove\n", strings.Join(autoApprove, ",")))
+	}
+
+	sb.WriteString("```\n")
+
+	return sb.String()
+}
+
 // GeneratePipelineIssueBody generates the issue body for a pipeline workflow.
 func GeneratePipelineIssueBody(data *TemplateData, state *IssueState, pipeline *config.PipelineConfig) string {
 	var sb strings.Builder
 
 	sb.WriteString(fmt.Sprintf("## 🚀 Deployment Pipeline: %s\n\n", data.Version))
 	sb.WriteString(fmt.Sprintf("%s\n\n", data.Description))
+
+	// Pipeline Mermaid diagram for visual flow
+	mermaidDiagram := GeneratePipelineMermaid(state, pipeline)
+	if mermaidDiagram != "" {
+		sb.WriteString("### Pipeline Flow\n\n")
+		sb.WriteString(mermaidDiagram)
+		sb.WriteString("\n")
+	}
 
 	// Pipeline status table
 	sb.WriteString("### Deployment Progress\n\n")

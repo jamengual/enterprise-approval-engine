@@ -351,3 +351,174 @@ func TestGeneratePipelineIssueBody_PipelineComplete(t *testing.T) {
 		t.Error("Should not show current stage when pipeline is complete")
 	}
 }
+
+func TestGeneratePipelineMermaid(t *testing.T) {
+	pipeline := &config.PipelineConfig{
+		Stages: []config.PipelineStage{
+			{Name: "dev", Environment: "development"},
+			{Name: "qa", Environment: "qa"},
+			{Name: "staging", Environment: "staging"},
+			{Name: "production", Environment: "production"},
+		},
+	}
+
+	state := &IssueState{
+		CurrentStage: 2,
+		StageHistory: []StageCompletion{
+			{Stage: "dev", ApprovedBy: "alice", ApprovedAt: time.Now().Format(time.RFC3339)},
+			{Stage: "qa", ApprovedBy: "bob", ApprovedAt: time.Now().Format(time.RFC3339)},
+		},
+	}
+
+	mermaid := GeneratePipelineMermaid(state, pipeline)
+
+	// Check Mermaid structure
+	if !strings.Contains(mermaid, "```mermaid") {
+		t.Error("Expected mermaid code block start")
+	}
+	if !strings.Contains(mermaid, "flowchart LR") {
+		t.Error("Expected flowchart LR declaration")
+	}
+	if !strings.Contains(mermaid, "DEV") {
+		t.Error("Expected DEV node")
+	}
+	if !strings.Contains(mermaid, "QA") {
+		t.Error("Expected QA node")
+	}
+	if !strings.Contains(mermaid, "STAGING") {
+		t.Error("Expected STAGING node")
+	}
+	if !strings.Contains(mermaid, "PRODUCTION") {
+		t.Error("Expected PRODUCTION node")
+	}
+	// Check connections
+	if !strings.Contains(mermaid, "DEV --> QA --> STAGING --> PRODUCTION") {
+		t.Error("Expected stage connections")
+	}
+	// Check style classes
+	if !strings.Contains(mermaid, "classDef completed") {
+		t.Error("Expected completed style class")
+	}
+	if !strings.Contains(mermaid, "classDef current") {
+		t.Error("Expected current style class")
+	}
+	if !strings.Contains(mermaid, "classDef pending") {
+		t.Error("Expected pending style class")
+	}
+	// Check class assignments
+	if !strings.Contains(mermaid, "class DEV,QA completed") {
+		t.Error("Expected DEV and QA to be marked as completed")
+	}
+	if !strings.Contains(mermaid, "class STAGING current") {
+		t.Error("Expected STAGING to be marked as current")
+	}
+	if !strings.Contains(mermaid, "class PRODUCTION pending") {
+		t.Error("Expected PRODUCTION to be marked as pending")
+	}
+	// Check emojis in labels
+	if !strings.Contains(mermaid, "✅ DEV") {
+		t.Error("Expected completed emoji in DEV label")
+	}
+	if !strings.Contains(mermaid, "⏳ STAGING") {
+		t.Error("Expected awaiting emoji in STAGING label")
+	}
+}
+
+func TestGeneratePipelineMermaid_Empty(t *testing.T) {
+	mermaid := GeneratePipelineMermaid(&IssueState{}, nil)
+	if mermaid != "" {
+		t.Errorf("Expected empty string for nil pipeline, got %q", mermaid)
+	}
+
+	mermaid = GeneratePipelineMermaid(&IssueState{}, &config.PipelineConfig{})
+	if mermaid != "" {
+		t.Errorf("Expected empty string for empty stages, got %q", mermaid)
+	}
+}
+
+func TestGeneratePipelineMermaid_AutoApprove(t *testing.T) {
+	pipeline := &config.PipelineConfig{
+		Stages: []config.PipelineStage{
+			{Name: "dev", AutoApprove: true},
+			{Name: "staging", AutoApprove: true},
+			{Name: "production", AutoApprove: false},
+		},
+	}
+
+	state := &IssueState{
+		CurrentStage: 0,
+		StageHistory: []StageCompletion{},
+	}
+
+	mermaid := GeneratePipelineMermaid(state, pipeline)
+
+	// Auto-approve stages should use autoApprove style class
+	if !strings.Contains(mermaid, "classDef autoApprove") {
+		t.Error("Expected autoApprove style class")
+	}
+	if !strings.Contains(mermaid, "class STAGING autoApprove") {
+		t.Error("Expected STAGING to be marked as autoApprove")
+	}
+	// Current stage should still be marked as current, not autoApprove
+	if !strings.Contains(mermaid, "class DEV current") {
+		t.Error("Expected DEV to be marked as current (even though it has AutoApprove)")
+	}
+}
+
+func TestGeneratePipelineMermaid_AutoApprovedStages(t *testing.T) {
+	pipeline := &config.PipelineConfig{
+		Stages: []config.PipelineStage{
+			{Name: "dev", AutoApprove: true},
+			{Name: "staging", AutoApprove: false},
+		},
+	}
+
+	state := &IssueState{
+		CurrentStage: 1,
+		StageHistory: []StageCompletion{
+			{Stage: "dev", ApprovedBy: "[auto]", ApprovedAt: time.Now().Format(time.RFC3339)},
+		},
+	}
+
+	mermaid := GeneratePipelineMermaid(state, pipeline)
+
+	// Auto-approved completed stages should show robot emoji
+	if !strings.Contains(mermaid, "🤖 DEV") {
+		t.Error("Expected robot emoji for auto-approved DEV")
+	}
+	// Should still be marked as completed (green)
+	if !strings.Contains(mermaid, "class DEV completed") {
+		t.Error("Expected DEV to be marked as completed")
+	}
+}
+
+func TestGeneratePipelineMermaid_AllComplete(t *testing.T) {
+	pipeline := &config.PipelineConfig{
+		Stages: []config.PipelineStage{
+			{Name: "dev"},
+			{Name: "prod"},
+		},
+	}
+
+	state := &IssueState{
+		CurrentStage: 2, // Past all stages
+		StageHistory: []StageCompletion{
+			{Stage: "dev", ApprovedBy: "alice", ApprovedAt: time.Now().Format(time.RFC3339)},
+			{Stage: "prod", ApprovedBy: "bob", ApprovedAt: time.Now().Format(time.RFC3339)},
+		},
+	}
+
+	mermaid := GeneratePipelineMermaid(state, pipeline)
+
+	// All should be completed
+	if !strings.Contains(mermaid, "class DEV,PROD completed") {
+		t.Error("Expected both stages to be marked as completed")
+	}
+	// Should not have current or pending classes
+	if strings.Contains(mermaid, "class") && strings.Contains(mermaid, "current") {
+		// This is tricky - we want to allow "classDef current" but not "class X current"
+		if strings.Contains(mermaid, "class DEV current") || strings.Contains(mermaid, "class PROD current") {
+			t.Error("Should not have current class when all stages are complete")
+		}
+	}
+}

@@ -105,6 +105,7 @@ type TemplateData struct {
 	// Deployment tracking
 	DeploymentPipeline []DeploymentStageData // Deployment stages
 	PipelineTable      string                // Pre-rendered deployment pipeline
+	PipelineMermaid    string                // Pre-rendered Mermaid diagram for pipeline
 	CurrentDeployment  *DeploymentStageData  // Current deployment stage
 
 	// Release info
