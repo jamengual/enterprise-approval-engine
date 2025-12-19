@@ -1,5 +1,5 @@
-# Request approval using external config from jamengual/.github
-name: Request Approval (External Config)
+# Request approval using local config
+name: Request Approval
 
 on:
   workflow_dispatch:
@@ -14,7 +14,7 @@ on:
         default: 'deploy'
         type: choice
         options:
-          - deploy        # Progressive pipeline (dev → qa → stage → prod)
+          - deploy        # Progressive pipeline (dev -> qa -> stage -> prod)
           - deploy-dev    # Individual: DEV only
           - deploy-qa     # Individual: QA only
           - deploy-stage  # Individual: STAGING only
@@ -31,8 +31,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Required for commit/PR comparison
 
-      # Use the local action (current repo) with external config
+      # Use the local action with local config
       - uses: ./
         id: approval
         with:
@@ -40,7 +42,6 @@ jobs:
           workflow: ${{ inputs.workflow_name }}
           version: ${{ inputs.version }}
           token: ${{ secrets.GITHUB_TOKEN }}
-          config_repo: jamengual/.github
 
       - name: Output Results
         env:
@@ -48,9 +49,8 @@ jobs:
           ISSUE_URL: ${{ steps.approval.outputs.issue_url }}
           STATUS: ${{ steps.approval.outputs.status }}
         run: |
-          echo "## Approval Request Created" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **Issue:** #${ISSUE_NUM}" >> $GITHUB_STEP_SUMMARY
-          echo "- **URL:** ${ISSUE_URL}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Status:** ${STATUS}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Config Source:** jamengual/.github/enterprise-approval-engine_approvals.yml" >> $GITHUB_STEP_SUMMARY
+          echo "## Approval Request Created" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Issue:** #${ISSUE_NUM}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **URL:** ${ISSUE_URL}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Status:** ${STATUS}" >> "$GITHUB_STEP_SUMMARY"

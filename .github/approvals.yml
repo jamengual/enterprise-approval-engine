@@ -1,0 +1,114 @@
+# Local config file for testing Mermaid diagram feature
+version: 1
+
+defaults:
+  timeout: 72h
+  allow_self_approval: true  # For easier testing
+  issue_labels:
+    - approval-required
+    - deployment
+
+policies:
+  dev-team:
+    approvers:
+      - jamengual
+    min_approvals: 1
+
+  qa-team:
+    approvers:
+      - jamengual
+    min_approvals: 1
+
+  stage-team:
+    approvers:
+      - jamengual
+    min_approvals: 1
+
+  prod-team:
+    approvers:
+      - jamengual
+    min_approvals: 1
+
+workflows:
+  # Progressive pipeline with 4 stages
+  deploy:
+    description: "Deploy through all environments (dev -> qa -> stage -> prod)"
+    require:
+      - policy: dev-team
+    pipeline:
+      track_prs: true
+      track_commits: true
+      stages:
+        - name: dev
+          environment: development
+          policy: dev-team
+          on_approved: "✅ **DEV** deployment approved! Proceeding to QA..."
+
+        - name: qa
+          environment: qa
+          policy: qa-team
+          on_approved: "✅ **QA** deployment approved! Proceeding to STAGING..."
+
+        - name: stage
+          environment: staging
+          policy: stage-team
+          on_approved: "✅ **STAGING** deployment approved! Ready for PRODUCTION..."
+
+        - name: prod
+          environment: production
+          policy: prod-team
+          create_tag: true
+          is_final: true
+          on_approved: "🚀 **PRODUCTION** deployment complete!"
+
+    on_approved:
+      close_issue: true
+      comment: |
+        🎉 **Deployment Complete!**
+
+        Version `{{version}}` has been deployed to all environments.
+
+  # Individual environment workflows
+  deploy-dev:
+    description: "Deploy to DEV only"
+    require:
+      - policy: dev-team
+    on_approved:
+      close_issue: true
+
+  deploy-qa:
+    description: "Deploy to QA only"
+    require:
+      - policy: qa-team
+    on_approved:
+      close_issue: true
+
+  deploy-stage:
+    description: "Deploy to STAGING only"
+    require:
+      - policy: stage-team
+    on_approved:
+      close_issue: true
+
+  deploy-prod:
+    description: "Deploy to PRODUCTION only"
+    require:
+      - policy: prod-team
+    on_approved:
+      create_tag: true
+      close_issue: true
+
+  # Release workflow
+  release:
+    description: "Release approval"
+    require:
+      - policy: prod-team
+    on_approved:
+      create_tag: true
+      close_issue: true
+
+semver:
+  prefix: "v"
+  strategy: input
+  validate: true
+  allow_prerelease: true
