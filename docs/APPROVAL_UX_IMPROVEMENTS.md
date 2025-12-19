@@ -13,6 +13,145 @@ Users approve deployments by commenting on issues with keywords like `approve`, 
 
 ---
 
+## Issue Close Protection
+
+### The Problem
+
+Anyone with **Triage** access or higher (Write, Maintain, Admin) can close any issue in a repository. This means unauthorized users could close approval issues, bypassing the approval workflow.
+
+### GitHub's Native Capabilities
+
+| Feature | Can Prevent Unauthorized Close? |
+|---------|--------------------------------|
+| Repository Permissions | ❌ No - Triage+ can close any issue |
+| Branch Protection | ❌ No - Only protects branches, not issues |
+| Issue Lock | ⚠️ Partial - Prevents ALL comments, too restrictive |
+| CODEOWNERS | ❌ No - Only for code review, not issues |
+
+**Conclusion:** GitHub has no native feature to restrict who can close specific issues.
+
+### Solution: Guardian Workflow
+
+We implement a "guardian" workflow that:
+1. Triggers on `issues.closed` event
+2. Checks if the closer is authorized (in the approval group)
+3. If unauthorized: reopens the issue + posts warning comment
+4. If authorized: allows the close and processes approval
+
+```yaml
+# .github/workflows/protect-approval-issues.yml
+name: Protect Approval Issues
+
+on:
+  issues:
+    types: [closed]
+
+jobs:
+  guard:
+    if: contains(github.event.issue.labels.*.name, 'approval-required')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jamengual/enterprise-approval-engine@v1
+        with:
+          action: validate-close
+          issue_number: ${{ github.event.issue.number }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+```
+
+### How It Works
+
+```
+User closes issue #100
+        │
+        ▼
+┌───────────────────────────────┐
+│ Guardian Workflow Triggers    │
+│ on: issues.closed             │
+└───────────────────────────────┘
+        │
+        ▼
+┌───────────────────────────────┐
+│ Check: Is closer authorized?  │
+│ - In approval group?          │
+│ - Is the assigned approver?   │
+│ - Has admin override?         │
+└───────────────────────────────┘
+        │
+        ├─── YES ───▶ Process approval normally
+        │
+        └─── NO ────▶ ┌─────────────────────────────┐
+                      │ 1. Reopen issue             │
+                      │ 2. Post warning comment     │
+                      │ 3. Log unauthorized attempt │
+                      └─────────────────────────────┘
+```
+
+### Warning Comment Template
+
+```markdown
+⚠️ **Unauthorized Close Attempt**
+
+@{{closer}} attempted to close this issue but is not an authorized approver.
+
+**Authorized approvers for this stage:**
+{{#each approvers}}
+- @{{this}}
+{{/each}}
+
+This issue has been automatically reopened.
+
+---
+*If you believe this is an error, please contact a repository administrator.*
+```
+
+### Configuration
+
+```yaml
+# .github/approvals.yml
+defaults:
+  protect_issues: true              # Enable guardian workflow
+  allow_admin_override: true        # Admins can always close
+  unauthorized_close_action: reopen # or "warn_only"
+
+workflows:
+  deploy:
+    protection:
+      strict: true                  # Even assignees must be in approval group
+      audit_log: true               # Log all close attempts
+```
+
+### Edge Cases
+
+| Scenario | Behavior |
+|----------|----------|
+| Admin closes issue | Allowed (if `allow_admin_override: true`) |
+| Bot closes issue | Allowed (bot is trusted) |
+| PR auto-close | Prevented (issue not linked to approval) |
+| Assignee not in group closes | Configurable (`strict: true` = reopen) |
+| Workflow failure | Issue stays closed, alert sent |
+
+### Sub-Issue Protection
+
+For sub-issues, protection is even more important:
+
+```yaml
+sub_issue_settings:
+  protection:
+    only_assignee_can_close: true   # Only the assigned approver
+    require_approval_comment: false # Must comment "approve" before close
+    prevent_parent_close: true      # Parent can't be closed until all sub-issues done
+```
+
+### Implementation Notes
+
+1. **Race Condition**: The guardian must act fast before other workflows process the close
+2. **Recursion Prevention**: Reopening triggers `issues.reopened`, not `issues.closed`
+3. **Rate Limits**: Consider batching for repos with many approval issues
+4. **Audit Trail**: All unauthorized attempts should be logged
+
+---
+
 ## Option 1: Sub-Issues for Approvals (Recommended)
 
 ### Overview
@@ -450,10 +589,49 @@ workflows:
 
 ---
 
-## Next Steps
+## Implementation Status
 
 1. ✅ Document options (this file)
-2. 🔲 Prototype sub-issues API integration
-3. 🔲 Implement enhanced comments (Phase 1)
-4. 🔲 Implement sub-issues (Phase 2)
+2. ✅ Prototype sub-issues API integration (`internal/github/sub_issues.go`)
+3. ✅ **Phase 1: Enhanced Comments UX**
+   - Emoji reactions on approval/denial comments (👍 approved, 👎 denied, 👀 seen)
+   - Quick Actions section in issue body with command reference
+   - `comment_settings` configuration for customization
+4. ✅ **Phase 2: Sub-Issues for Approvals**
+   - `approval_mode: sub_issues` workflow configuration
+   - `sub_issue_settings` for title/body templates, labels, protection
+   - Per-stage approval mode override for hybrid workflows
+   - Sub-issue creation on pipeline issue creation
+   - Sub-issue close processing with authorization checks
+   - Issue close protection (reopen unauthorized closes)
 5. 🔲 Gather user feedback
+
+## New Configuration Options
+
+```yaml
+workflows:
+  deploy:
+    # Enhanced comments UX (Phase 1)
+    comment_settings:
+      react_to_comments: true    # Add emoji reactions
+      show_quick_actions: true   # Show Quick Actions in issue body
+
+    # Sub-issue approvals (Phase 2)
+    approval_mode: sub_issues    # "comments" (default), "sub_issues", or "hybrid"
+    sub_issue_settings:
+      title_template: "✅ Approve: {{stage}} for {{version}}"
+      labels: [approval-stage]
+      auto_close_remaining: true  # Close other sub-issues on denial
+      protection:
+        only_assignee_can_close: true
+        require_approval_comment: false
+        prevent_parent_close: true
+
+    # Hybrid mode - per-stage override
+    pipeline:
+      stages:
+        - name: dev
+          approval_mode: comments   # Simple stages use comments
+        - name: prod
+          approval_mode: sub_issues # Critical stages use sub-issues
+```

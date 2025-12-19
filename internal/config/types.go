@@ -98,6 +98,139 @@ type Workflow struct {
 
 	// Progressive deployment pipeline
 	Pipeline *PipelineConfig `yaml:"pipeline,omitempty"` // Multi-stage deployment pipeline
+
+	// Enhanced comments UX
+	CommentSettings *CommentSettings `yaml:"comment_settings,omitempty"`
+
+	// Approval mode: "comments" (default), "sub_issues", or "hybrid"
+	ApprovalMode ApprovalMode `yaml:"approval_mode,omitempty"`
+
+	// Sub-issue settings (only used when approval_mode is "sub_issues" or "hybrid")
+	SubIssueSettings *SubIssueSettings `yaml:"sub_issue_settings,omitempty"`
+}
+
+// GetApprovalMode returns the approval mode with default.
+func (w *Workflow) GetApprovalMode() ApprovalMode {
+	if w.ApprovalMode == "" {
+		return ApprovalModeComments
+	}
+	return w.ApprovalMode
+}
+
+// UsesSubIssues returns true if this workflow uses sub-issues for approvals.
+func (w *Workflow) UsesSubIssues() bool {
+	mode := w.GetApprovalMode()
+	return mode == ApprovalModeSubIssues || mode == ApprovalModeHybrid
+}
+
+// CommentSettings configures enhanced comment-based approval UX.
+type CommentSettings struct {
+	// ReactToComments adds emoji reactions to approval/denial comments
+	// 👀 = processing, ✅ = approved, ❌ = denied, 😕 = not authorized
+	ReactToComments *bool `yaml:"react_to_comments,omitempty"`
+
+	// ShowQuickActions shows command help in the issue body
+	ShowQuickActions *bool `yaml:"show_quick_actions,omitempty"`
+
+	// RequireSlashPrefix requires /approve and /deny prefixes (more explicit)
+	RequireSlashPrefix bool `yaml:"require_slash_prefix,omitempty"`
+}
+
+// ShouldReactToComments returns whether to add emoji reactions to comments.
+// Defaults to true if not explicitly set.
+func (c *CommentSettings) ShouldReactToComments() bool {
+	if c == nil || c.ReactToComments == nil {
+		return true // default: react to comments
+	}
+	return *c.ReactToComments
+}
+
+// ShouldShowQuickActions returns whether to show the quick actions section.
+// Defaults to true if not explicitly set.
+func (c *CommentSettings) ShouldShowQuickActions() bool {
+	if c == nil || c.ShowQuickActions == nil {
+		return true // default: show quick actions
+	}
+	return *c.ShowQuickActions
+}
+
+// ApprovalMode defines how approvals are collected.
+type ApprovalMode string
+
+const (
+	// ApprovalModeComments uses comment-based approvals (default).
+	ApprovalModeComments ApprovalMode = "comments"
+	// ApprovalModeSubIssues creates sub-issues for each stage/approval.
+	ApprovalModeSubIssues ApprovalMode = "sub_issues"
+	// ApprovalModeHybrid uses comments for simple stages and sub-issues for critical ones.
+	ApprovalModeHybrid ApprovalMode = "hybrid"
+)
+
+// SubIssueSettings configures sub-issue based approval UX.
+type SubIssueSettings struct {
+	// TitleTemplate is the template for sub-issue titles.
+	// Available variables: {{stage}}, {{version}}, {{workflow}}, {{environment}}
+	// Default: "✅ Approve: {{stage}} for {{version}}"
+	TitleTemplate string `yaml:"title_template,omitempty"`
+
+	// BodyTemplate is the template for sub-issue body content.
+	BodyTemplate string `yaml:"body_template,omitempty"`
+
+	// Labels to apply to sub-issues (in addition to 'approval-sub-issue').
+	Labels []string `yaml:"labels,omitempty"`
+
+	// AutoCloseRemaining closes remaining sub-issues when one is denied.
+	AutoCloseRemaining bool `yaml:"auto_close_remaining,omitempty"`
+
+	// Protection settings for sub-issues.
+	Protection *SubIssueProtection `yaml:"protection,omitempty"`
+}
+
+// SubIssueProtection configures issue close protection for sub-issues.
+type SubIssueProtection struct {
+	// OnlyAssigneeCanClose requires only the assigned approver can close.
+	OnlyAssigneeCanClose bool `yaml:"only_assignee_can_close,omitempty"`
+
+	// RequireApprovalComment requires "approve" comment before close counts.
+	RequireApprovalComment bool `yaml:"require_approval_comment,omitempty"`
+
+	// PreventParentClose prevents parent issue from being closed until all sub-issues done.
+	PreventParentClose bool `yaml:"prevent_parent_close,omitempty"`
+}
+
+// GetTitleTemplate returns the title template with a sensible default.
+func (s *SubIssueSettings) GetTitleTemplate() string {
+	if s == nil || s.TitleTemplate == "" {
+		return "✅ Approve: {{stage}} for {{version}}"
+	}
+	return s.TitleTemplate
+}
+
+// GetBodyTemplate returns the body template with a sensible default.
+func (s *SubIssueSettings) GetBodyTemplate() string {
+	if s == nil || s.BodyTemplate == "" {
+		return `## Approval Request
+
+**Stage:** {{stage}}
+**Version:** {{version}}
+**Parent Issue:** #{{parent_issue}}
+
+### To Approve
+Close this issue to approve the {{stage}} deployment.
+
+### To Deny
+Comment ` + "`deny`" + ` with a reason, then close.`
+	}
+	return s.BodyTemplate
+}
+
+// GetLabels returns the labels to apply to sub-issues.
+func (s *SubIssueSettings) GetLabels() []string {
+	labels := []string{"approval-sub-issue"}
+	if s != nil {
+		labels = append(labels, s.Labels...)
+	}
+	return labels
 }
 
 // PipelineConfig defines a progressive deployment pipeline.
@@ -135,6 +268,25 @@ type PipelineStage struct {
 	CreateTag   bool     `yaml:"create_tag,omitempty"`   // Create tag at this stage
 	IsFinal     bool     `yaml:"is_final,omitempty"`     // If true, close issue after this stage
 	AutoApprove bool     `yaml:"auto_approve,omitempty"` // If true, automatically approve this stage without human intervention
+
+	// ApprovalMode overrides the workflow-level approval mode for this stage.
+	// Useful for hybrid mode where production uses sub-issues but dev uses comments.
+	ApprovalMode ApprovalMode `yaml:"approval_mode,omitempty"`
+}
+
+// GetApprovalMode returns the effective approval mode for this stage.
+// Uses the stage-level override if set, otherwise falls back to workflow default.
+func (s *PipelineStage) GetApprovalMode(workflowDefault ApprovalMode) ApprovalMode {
+	if s.ApprovalMode != "" {
+		return s.ApprovalMode
+	}
+	return workflowDefault
+}
+
+// UsesSubIssue returns true if this stage should use a sub-issue for approval.
+func (s *PipelineStage) UsesSubIssue(workflowDefault ApprovalMode) bool {
+	mode := s.GetApprovalMode(workflowDefault)
+	return mode == ApprovalModeSubIssues || mode == ApprovalModeHybrid
 }
 
 // IsPipeline returns true if this workflow uses a progressive pipeline.

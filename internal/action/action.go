@@ -195,6 +195,25 @@ func (h *Handler) Request(ctx context.Context, input RequestInput) (*RequestOutp
 		return nil, err
 	}
 
+	// Create sub-issues if the workflow uses sub-issue approval mode
+	if workflow.IsPipeline() && workflow.UsesSubIssues() {
+		subHandler := NewSubIssueHandler(h.client, h.config, workflow)
+		subIssues, err := subHandler.CreateSubIssuesForPipeline(ctx, issue.Number, &templateData.State, workflow.Pipeline)
+		if err != nil {
+			// Log error but don't fail - the parent issue is already created
+			_ = h.client.CreateComment(ctx, issue.Number,
+				fmt.Sprintf("**Warning:** Failed to create sub-issues for approval stages: %v\n\nPlease use comment-based approval instead.", err))
+		} else if len(subIssues) > 0 {
+			// Update the parent issue with sub-issue information
+			templateData.State.SubIssues = subIssues
+			templateData.State.ApprovalMode = string(workflow.GetApprovalMode())
+
+			// Regenerate and update the issue body with sub-issue links
+			updatedBody := GeneratePipelineIssueBodyWithSubIssues(&templateData, &templateData.State, workflow.Pipeline, subIssues)
+			_ = h.client.UpdateIssueBody(ctx, issue.Number, updatedBody)
+		}
+	}
+
 	return &RequestOutput{
 		IssueNumber: issue.Number,
 		IssueURL:    issue.HTMLURL,
@@ -370,6 +389,42 @@ type ProcessCommentOutput struct {
 	Tag            string
 }
 
+// ReactionType defines the type of reaction to add to a comment.
+type ReactionType string
+
+const (
+	ReactionEyes     ReactionType = "eyes"     // 👀 - processing/seen
+	ReactionApproved ReactionType = "+1"       // 👍 - approved
+	ReactionDenied   ReactionType = "-1"       // 👎 - denied
+	ReactionConfused ReactionType = "confused" // 😕 - not authorized
+	ReactionRocket   ReactionType = "rocket"   // 🚀 - deployed
+)
+
+// addReactionToComment adds an emoji reaction to a comment if configured.
+func (h *Handler) addReactionToComment(ctx context.Context, commentID int64, reaction ReactionType, settings *config.CommentSettings) {
+	if settings.ShouldReactToComments() {
+		_ = h.client.AddReaction(ctx, commentID, string(reaction))
+	}
+}
+
+// addCommentReaction adds an appropriate reaction based on the approval result.
+func (h *Handler) addCommentReaction(ctx context.Context, commentID int64, result *approval.ApprovalResult, settings *config.CommentSettings) {
+	if !settings.ShouldReactToComments() {
+		return
+	}
+
+	switch result.Status {
+	case approval.StatusApproved:
+		_ = h.client.AddReaction(ctx, commentID, string(ReactionApproved))
+	case approval.StatusDenied:
+		_ = h.client.AddReaction(ctx, commentID, string(ReactionDenied))
+	case approval.StatusPending:
+		// For pending, add eyes emoji to indicate the comment was seen
+		// but only if it contained an approval/denial keyword from an unauthorized user
+		_ = h.client.AddReaction(ctx, commentID, string(ReactionEyes))
+	}
+}
+
 // ProcessComment processes an approval/denial comment.
 func (h *Handler) ProcessComment(ctx context.Context, input ProcessCommentInput) (*ProcessCommentOutput, error) {
 	// Get the issue
@@ -426,6 +481,9 @@ func (h *Handler) ProcessComment(ctx context.Context, input ProcessCommentInput)
 		Denier:         result.Denier,
 		SatisfiedGroup: result.SatisfiedGroup,
 	}
+
+	// Add emoji reaction to the comment based on result
+	h.addCommentReaction(ctx, input.CommentID, result, workflow.CommentSettings)
 
 	// Handle approval
 	if result.Status == approval.StatusApproved {
@@ -563,6 +621,9 @@ func (h *Handler) processPipelineComment(
 		Approvers: extractApprovers(result.Approvals),
 		Denier:    result.Denier,
 	}
+
+	// Add emoji reaction to the comment based on result
+	h.addCommentReaction(ctx, input.CommentID, result, workflow.CommentSettings)
 
 	// If current stage is approved, advance the pipeline
 	if result.Status == approval.StatusApproved {
@@ -966,6 +1027,117 @@ func (h *Handler) CloseIssue(ctx context.Context, input CloseIssueInput) (*Close
 			"version": state.Version,
 		})
 		_ = h.client.CreateComment(ctx, input.IssueNumber, comment)
+	}
+
+	return output, nil
+}
+
+// ProcessSubIssueCloseInput contains inputs for processing a sub-issue close event.
+type ProcessSubIssueCloseInput struct {
+	IssueNumber int
+	ClosedBy    string
+	Action      string // "closed" or "reopened"
+}
+
+// ProcessSubIssueCloseOutput contains outputs from processing a sub-issue close.
+type ProcessSubIssueCloseOutput struct {
+	ParentIssueNumber int
+	StageName         string
+	Status            string // "approved", "denied", "reopened", "unauthorized"
+	PipelineComplete  bool
+	NextStage         string
+	Message           string
+}
+
+// ProcessSubIssueClose handles the close event for an approval sub-issue.
+func (h *Handler) ProcessSubIssueClose(ctx context.Context, input ProcessSubIssueCloseInput) (*ProcessSubIssueCloseOutput, error) {
+	// First, check if this issue is a sub-issue
+	isSub, err := h.client.IsSubIssue(ctx, input.IssueNumber)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check if issue is sub-issue: %w", err)
+	}
+	if !isSub {
+		// Not a sub-issue, skip processing
+		return &ProcessSubIssueCloseOutput{
+			Status: "skipped",
+		}, nil
+	}
+
+	// Get parent issue to determine workflow
+	parent, err := h.client.GetParentIssue(ctx, input.IssueNumber)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get parent issue: %w", err)
+	}
+	if parent == nil {
+		return &ProcessSubIssueCloseOutput{
+			Status: "skipped",
+		}, nil
+	}
+
+	// Get parent issue details
+	parentIssue, err := h.client.GetIssue(ctx, parent.GetNumber())
+	if err != nil {
+		return nil, fmt.Errorf("failed to get parent issue details: %w", err)
+	}
+
+	// Parse state from parent issue
+	state, err := ParseIssueState(parentIssue.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse parent issue state: %w", err)
+	}
+
+	// Get workflow configuration
+	workflow, err := h.config.GetWorkflow(state.Workflow)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get workflow: %w", err)
+	}
+
+	// Create sub-issue handler and process the close
+	subHandler := NewSubIssueHandler(h.client, h.config, workflow)
+	result, err := subHandler.ProcessSubIssueClose(ctx, ProcessSubIssueCloseInput{
+		IssueNumber: input.IssueNumber,
+		ClosedBy:    input.ClosedBy,
+		Action:      input.Action,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	output := &ProcessSubIssueCloseOutput{
+		ParentIssueNumber: result.ParentIssueNumber,
+		StageName:         result.StageName,
+		Status:            result.Status,
+		PipelineComplete:  result.PipelineComplete,
+		NextStage:         result.NextStage,
+		Message:           result.Message,
+	}
+
+	// If pipeline is complete, handle workflow completion
+	if result.PipelineComplete && result.Status == "approved" {
+		// Post final completion comment
+		if workflow.OnApproved.Comment != "" {
+			comment := ReplaceTemplateVars(workflow.OnApproved.Comment, map[string]string{
+				"version": state.Version,
+			})
+			_ = h.client.CreateComment(ctx, parent.GetNumber(), comment)
+		}
+
+		// Create tag if configured
+		if workflow.OnApproved.CreateTag && state.Version != "" {
+			tagName := state.Version
+			exists, err := h.client.TagExists(ctx, tagName)
+			if err == nil && !exists {
+				_, _ = h.client.CreateTag(ctx, github.CreateTagOptions{
+					Name:    tagName,
+					Message: fmt.Sprintf("Release %s - approved via IssueOps sub-issues", tagName),
+				})
+			}
+		}
+
+		// Close parent issue if configured
+		if workflow.OnApproved.CloseIssue {
+			_ = h.client.CloseIssue(ctx, parent.GetNumber())
+		}
 	}
 
 	return output, nil

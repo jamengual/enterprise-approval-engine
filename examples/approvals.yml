@@ -294,6 +294,135 @@ workflows:
       close_issue: true
       comment: "Hotfix {{version}} deployed to production!"
 
+  #############################################
+  # SUB-ISSUES - Interactive Approval Mode
+  #############################################
+
+  # Sub-issues: Each stage gets its own approval issue
+  # Approvers close their sub-issue to approve, instead of commenting
+  sub-issue-deploy:
+    description: "Deploy with sub-issues for each stage approval"
+    require:
+      - policy: dev-team
+
+    # Enable sub-issues mode
+    approval_mode: sub_issues
+    sub_issue_settings:
+      # Template for sub-issue titles
+      title_template: "✅ Approve: {{stage}} deployment for {{version}}"
+      # Additional labels for sub-issues
+      labels:
+        - approval-stage
+        - needs-review
+      # Close remaining sub-issues if one is denied
+      auto_close_remaining: true
+      # Protection settings
+      protection:
+        # Only assigned approvers can close the sub-issue
+        only_assignee_can_close: true
+        # No approval comment required - just close to approve
+        require_approval_comment: false
+        # Parent issue can't be closed until all sub-issues are done
+        prevent_parent_close: true
+
+    # Enhanced comments UX (fallback and reactions)
+    comment_settings:
+      react_to_comments: true
+      show_quick_actions: true
+
+    pipeline:
+      show_mermaid_diagram: true
+      track_prs: true
+      track_commits: true
+      stages:
+        - name: dev
+          environment: development
+          policy: dev-team
+          on_approved: "✅ DEV approved via sub-issue"
+
+        - name: qa
+          environment: qa
+          policy: platform-team
+          on_approved: "✅ QA approved via sub-issue"
+
+        - name: staging
+          environment: staging
+          policy: leads
+          on_approved: "✅ STAGING approved via sub-issue"
+
+        - name: production
+          environment: production
+          policy: production-gate
+          create_tag: true
+          is_final: true
+          on_approved: "🚀 PRODUCTION approved and deployed!"
+
+    on_approved:
+      close_issue: true
+      comment: |
+        🎉 **Deployment Complete!**
+
+        All stages approved via sub-issues.
+        Version `{{version}}` is now in production.
+
+  # Hybrid mode: Comments for simple stages, sub-issues for critical
+  hybrid-deploy:
+    description: "Hybrid: comments for dev/qa, sub-issues for staging/prod"
+    require:
+      - policy: dev-team
+
+    # Default to comments
+    approval_mode: comments
+
+    # Enhanced UX for comments
+    comment_settings:
+      react_to_comments: true
+      show_quick_actions: true
+
+    # Sub-issue settings (used when stage overrides to sub_issues)
+    sub_issue_settings:
+      title_template: "🔐 Critical Approval: {{stage}} for {{version}}"
+      labels:
+        - critical-approval
+      protection:
+        only_assignee_can_close: true
+        prevent_parent_close: true
+
+    pipeline:
+      show_mermaid_diagram: true
+      stages:
+        # Comments-based (uses workflow default)
+        - name: dev
+          environment: development
+          policy: dev-team
+          on_approved: "✅ DEV approved"
+
+        # Comments-based (uses workflow default)
+        - name: qa
+          environment: qa
+          policy: dev-team
+          on_approved: "✅ QA approved"
+
+        # Sub-issue for staging (override)
+        - name: staging
+          environment: staging
+          policy: leads
+          approval_mode: sub_issues  # Override: use sub-issue
+          on_approved: "✅ STAGING approved via sub-issue"
+
+        # Sub-issue for production (override)
+        - name: production
+          environment: production
+          policy: production-gate
+          approval_mode: sub_issues  # Override: use sub-issue
+          create_tag: true
+          is_final: true
+          on_approved: "🚀 PRODUCTION approved via sub-issue!"
+
+    on_approved:
+      close_issue: true
+      comment: "Deployment {{version}} complete!"
+
 # Semver configuration
 semver:
   prefix: "v"

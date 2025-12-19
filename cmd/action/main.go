@@ -66,8 +66,10 @@ func run() error {
 		return handleProcessComment(ctx, handler)
 	case "close-issue":
 		return handleCloseIssue(ctx, handler)
+	case "process-sub-issue-close":
+		return handleProcessSubIssueClose(ctx, handler)
 	default:
-		return fmt.Errorf("unknown action: %s (expected request, check, process-comment, or close-issue)", actionType)
+		return fmt.Errorf("unknown action: %s (expected request, check, process-comment, close-issue, or process-sub-issue-close)", actionType)
 	}
 }
 
@@ -258,5 +260,75 @@ func handleCloseIssue(ctx context.Context, handler *action.Handler) error {
 	return action.SetOutputs(map[string]string{
 		"status":      output.Status,
 		"tag_deleted": output.TagDeleted,
+	})
+}
+
+func handleProcessSubIssueClose(ctx context.Context, handler *action.Handler) error {
+	// Get issue number from input or event
+	issueNumber, err := getIssueNumberFromEvent()
+	if err != nil {
+		return fmt.Errorf("failed to get issue number: %w", err)
+	}
+	if issueNumber == 0 {
+		return fmt.Errorf("issue_number input is required for process-sub-issue-close action")
+	}
+
+	// Get who closed the issue
+	closedBy := action.GetInput("closed_by")
+	if closedBy == "" {
+		// Try to get from event sender
+		sender, err := action.GetEventSender()
+		if err == nil && sender != "" {
+			closedBy = sender
+		}
+	}
+
+	// Get the action type from event or input
+	eventAction := action.GetInput("event_action")
+	if eventAction == "" {
+		// Try to get from event
+		ea, err := action.GetEventAction()
+		if err == nil && ea != "" {
+			eventAction = ea
+		}
+	}
+	if eventAction == "" {
+		eventAction = "closed" // Default to closed
+	}
+
+	input := action.ProcessSubIssueCloseInput{
+		IssueNumber: issueNumber,
+		ClosedBy:    closedBy,
+		Action:      eventAction,
+	}
+
+	output, err := handler.ProcessSubIssueClose(ctx, input)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("Sub-issue processing status: %s\n", output.Status)
+	if output.StageName != "" {
+		fmt.Printf("Stage: %s\n", output.StageName)
+	}
+	if output.ParentIssueNumber > 0 {
+		fmt.Printf("Parent issue: #%d\n", output.ParentIssueNumber)
+	}
+	if output.PipelineComplete {
+		fmt.Println("Pipeline complete!")
+	} else if output.NextStage != "" {
+		fmt.Printf("Next stage: %s\n", output.NextStage)
+	}
+	if output.Message != "" {
+		fmt.Printf("Message: %s\n", output.Message)
+	}
+
+	return action.SetOutputs(map[string]string{
+		"status":              output.Status,
+		"parent_issue_number": fmt.Sprintf("%d", output.ParentIssueNumber),
+		"stage_name":          output.StageName,
+		"next_stage":          output.NextStage,
+		"pipeline_complete":   fmt.Sprintf("%t", output.PipelineComplete),
+		"message":             output.Message,
 	})
 }

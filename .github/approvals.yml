@@ -1,4 +1,4 @@
-# Local config file for testing Mermaid diagram feature
+# Local config file for testing approval features
 version: 1
 
 defaults:
@@ -30,7 +30,65 @@ policies:
     min_approvals: 1
 
 workflows:
-  # Progressive pipeline with 4 stages
+  # Progressive pipeline with sub-issues for approvals
+  deploy-with-sub-issues:
+    description: "Deploy through all environments using sub-issues (dev -> qa -> stage -> prod)"
+    require:
+      - policy: dev-team
+
+    # Use sub-issues for approvals - each stage gets its own issue
+    approval_mode: sub_issues
+    sub_issue_settings:
+      title_template: "✅ Approve: {{stage}} deployment for {{version}}"
+      labels:
+        - approval-stage
+        - needs-review
+      auto_close_remaining: true  # Close other sub-issues if one is denied
+      protection:
+        only_assignee_can_close: true   # Only assigned approvers can close
+        require_approval_comment: false  # Just close to approve
+        prevent_parent_close: true       # Parent can't close until all sub-issues done
+
+    # Enhanced comments UX (for any fallback to comments)
+    comment_settings:
+      react_to_comments: true
+      show_quick_actions: true
+
+    pipeline:
+      track_prs: true
+      track_commits: true
+      show_mermaid_diagram: true
+      stages:
+        - name: dev
+          environment: development
+          policy: dev-team
+          on_approved: "✅ **DEV** deployment approved! Proceeding to QA..."
+
+        - name: qa
+          environment: qa
+          policy: qa-team
+          on_approved: "✅ **QA** deployment approved! Proceeding to STAGING..."
+
+        - name: stage
+          environment: staging
+          policy: stage-team
+          on_approved: "✅ **STAGING** deployment approved! Ready for PRODUCTION..."
+
+        - name: prod
+          environment: production
+          policy: prod-team
+          create_tag: true
+          is_final: true
+          on_approved: "🚀 **PRODUCTION** deployment complete!"
+
+    on_approved:
+      close_issue: true
+      comment: |
+        🎉 **Deployment Complete!**
+
+        Version `{{version}}` has been deployed to all environments.
+
+  # Progressive pipeline with comments (original)
   deploy:
     description: "Deploy through all environments (dev -> qa -> stage -> prod)"
     require:

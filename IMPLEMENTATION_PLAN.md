@@ -652,6 +652,107 @@ pipeline:
 
 ---
 
+## Stage 14: Enhanced Approval UX (Sub-Issues & Comments)
+**Goal**: Provide interactive approval experiences via sub-issues and enhanced comments
+**Success Criteria**:
+- Sub-issues created for each pipeline stage when configured
+- Closing sub-issue = approving the stage
+- Emoji reactions on approval/denial comments
+- Quick Actions section in issue body
+- Issue close protection (reopen unauthorized closes)
+- Hybrid mode: mix comments and sub-issues per stage
+
+**Tests**:
+- Create pipeline with sub-issues mode → sub-issues created and linked
+- Close sub-issue → stage approved, parent issue updated
+- Unauthorized close → issue reopened with warning
+- Hybrid mode respects per-stage overrides
+- Comment reactions added on approval/denial
+
+**Status**: Complete
+
+### Implementation
+
+#### Phase 1: Enhanced Comments UX
+- **Emoji reactions** on approval comments: 👍 approved, 👎 denied, 👀 seen
+- **Quick Actions section** in issue body with command reference table
+- **Configuration** via `comment_settings` in workflow
+
+#### Phase 2: Sub-Issues for Approvals
+- **Approval modes**: `comments` (default), `sub_issues`, `hybrid`
+- **Sub-issue settings**: title/body templates, labels, protection
+- **Per-stage override**: `approval_mode` on individual stages
+- **Close protection**: auto-reopen if closed by unauthorized user
+- **Parent protection**: prevent parent close until sub-issues done
+
+#### Files Created/Modified:
+- `internal/action/sub_issue_handler.go` - Sub-issue creation and close handling
+- `internal/action/action.go` - Reaction support, `ProcessSubIssueClose` handler
+- `internal/action/pipeline.go` - `GeneratePipelineIssueBodyWithSubIssues()`
+- `internal/action/template.go` - `SubIssueInfo` struct in `IssueState`
+- `internal/config/types.go` - `ApprovalMode`, `SubIssueSettings`, `CommentSettings`
+- `internal/github/issues.go` - `GetIssueByNumber`, `ReopenIssue`
+- `internal/github/sub_issues.go` - GitHub Sub-Issues API wrapper
+
+#### Key Types:
+```go
+// ApprovalMode defines how approvals are collected
+type ApprovalMode string
+const (
+    ApprovalModeComments  ApprovalMode = "comments"
+    ApprovalModeSubIssues ApprovalMode = "sub_issues"
+    ApprovalModeHybrid    ApprovalMode = "hybrid"
+)
+
+// SubIssueSettings configures sub-issue based approval UX
+type SubIssueSettings struct {
+    TitleTemplate      string
+    BodyTemplate       string
+    Labels             []string
+    AutoCloseRemaining bool
+    Protection         *SubIssueProtection
+}
+
+// SubIssueProtection configures issue close protection
+type SubIssueProtection struct {
+    OnlyAssigneeCanClose   bool
+    RequireApprovalComment bool
+    PreventParentClose     bool
+}
+
+// CommentSettings configures enhanced comment UX
+type CommentSettings struct {
+    ReactToComments    *bool
+    ShowQuickActions   *bool
+    RequireSlashPrefix bool
+}
+```
+
+#### Configuration Example:
+```yaml
+workflows:
+  deploy:
+    approval_mode: sub_issues
+    sub_issue_settings:
+      title_template: "✅ Approve: {{stage}} for {{version}}"
+      labels: [approval-stage]
+      protection:
+        only_assignee_can_close: true
+        prevent_parent_close: true
+    comment_settings:
+      react_to_comments: true
+      show_quick_actions: true
+    pipeline:
+      stages:
+        - name: dev
+          policy: dev-team
+        - name: prod
+          policy: prod-team
+          approval_mode: sub_issues  # Per-stage override
+```
+
+---
+
 ## Future Enhancements
 
 ### Planned Features

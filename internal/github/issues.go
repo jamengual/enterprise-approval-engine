@@ -152,6 +152,27 @@ func (c *Client) AddReaction(ctx context.Context, commentID int64, reaction stri
 	return nil
 }
 
+// GetIssueByNumber retrieves the full GitHub issue object by number.
+// Returns the underlying github.Issue which includes the ID field.
+func (c *Client) GetIssueByNumber(ctx context.Context, number int) (*github.Issue, *github.Response, error) {
+	issue, resp, err := c.client.Issues.Get(ctx, c.owner, c.repo, number)
+	if err != nil {
+		return nil, resp, fmt.Errorf("failed to get issue %d: %w", number, err)
+	}
+	return issue, resp, nil
+}
+
+// ReopenIssue reopens a closed issue.
+func (c *Client) ReopenIssue(ctx context.Context, number int) error {
+	state := "open"
+	req := &github.IssueRequest{State: &state}
+	_, _, err := c.client.Issues.Edit(ctx, c.owner, c.repo, number, req)
+	if err != nil {
+		return fmt.Errorf("failed to reopen issue %d: %w", number, err)
+	}
+	return nil
+}
+
 func issueFromGitHub(issue *github.Issue) *Issue {
 	var labels []string
 	for _, label := range issue.Labels {

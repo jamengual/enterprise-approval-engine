@@ -42,6 +42,21 @@ type IssueState struct {
 
 	// Auto-approval tracking
 	AutoApprovedStages []string `json:"auto_approved_stages,omitempty"` // Stages that were automatically approved
+
+	// Sub-issue tracking (when using approval_mode: sub_issues)
+	SubIssues    []SubIssueInfo `json:"sub_issues,omitempty"`     // Sub-issues created for stages
+	ApprovalMode string         `json:"approval_mode,omitempty"`  // "comments", "sub_issues", or "hybrid"
+}
+
+// SubIssueInfo tracks a sub-issue created for stage approval.
+type SubIssueInfo struct {
+	IssueNumber int      `json:"issue_number"`          // GitHub issue number
+	IssueID     int64    `json:"issue_id"`              // GitHub issue ID (for sub-issue API)
+	Stage       string   `json:"stage"`                 // Pipeline stage name
+	Status      string   `json:"status"`                // "open", "approved", "denied"
+	Assignees   []string `json:"assignees,omitempty"`   // Assigned approvers
+	ClosedBy    string   `json:"closed_by,omitempty"`   // User who closed the issue
+	ClosedAt    string   `json:"closed_at,omitempty"`   // When the issue was closed
 }
 
 // StageCompletion records when a stage was completed.

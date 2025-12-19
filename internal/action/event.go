@@ -98,6 +98,16 @@ func GetEventAction() (string, error) {
 	return event.Action, nil
 }
 
+// GetEventSender returns the login of the user who triggered the event.
+func GetEventSender() (string, error) {
+	event, err := ParseGitHubEvent()
+	if err != nil {
+		return "", err
+	}
+
+	return event.Sender.Login, nil
+}
+
 // IsIssueOpsIssue checks if the issue has the approval-required label.
 func IsIssueOpsIssue() (bool, error) {
 	event, err := ParseGitHubEvent()

@@ -8,7 +8,7 @@ branding:
 
 inputs:
   action:
-    description: 'Action to perform: request, check, process-comment, close-issue'
+    description: 'Action to perform: request, check, process-comment, close-issue, process-sub-issue-close'
     required: true
 
   workflow:
@@ -56,6 +56,15 @@ inputs:
 
   issue_action:
     description: 'Issue event action (closed, reopened) for close-issue action'
+    required: false
+
+  # Sub-issue processing
+  closed_by:
+    description: 'Username who closed the sub-issue'
+    required: false
+
+  event_action:
+    description: 'Event action (closed, reopened) for process-sub-issue-close'
     required: false
 
   # Jira Integration
@@ -125,6 +134,22 @@ outputs:
 
   tag_deleted:
     description: 'Tag that was deleted (for close-issue action)'
+
+  # Sub-issue outputs
+  parent_issue_number:
+    description: 'Parent issue number for sub-issue processing'
+
+  stage_name:
+    description: 'Pipeline stage name that was approved/denied'
+
+  next_stage:
+    description: 'Next pipeline stage awaiting approval'
+
+  pipeline_complete:
+    description: 'Whether the pipeline is complete'
+
+  message:
+    description: 'Status message from sub-issue processing'
 
   # Jira outputs
   jira_issues:

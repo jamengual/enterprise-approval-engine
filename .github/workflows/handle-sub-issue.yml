@@ -1,0 +1,53 @@
+# Handle sub-issue close events for approval workflows
+name: Handle Sub-Issue Close
+
+on:
+  issues:
+    types: [closed, reopened]
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  process-sub-issue:
+    # Only run on issues with approval-sub-issue label
+    if: contains(github.event.issue.labels.*.name, 'approval-sub-issue')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./
+        id: process
+        with:
+          action: process-sub-issue-close
+          issue_number: ${{ github.event.issue.number }}
+          closed_by: ${{ github.event.sender.login }}
+          event_action: ${{ github.event.action }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Handle Result
+        env:
+          STATUS: ${{ steps.process.outputs.status }}
+          PARENT_ISSUE: ${{ steps.process.outputs.parent_issue_number }}
+          STAGE: ${{ steps.process.outputs.stage_name }}
+          NEXT_STAGE: ${{ steps.process.outputs.next_stage }}
+          PIPELINE_COMPLETE: ${{ steps.process.outputs.pipeline_complete }}
+          MESSAGE: ${{ steps.process.outputs.message }}
+        run: |
+          echo "## Sub-Issue Processing Result" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status:** ${STATUS}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Stage:** ${STAGE}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Parent Issue:** #${PARENT_ISSUE}" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${STATUS}" = "approved" ]; then
+            echo "- **Pipeline Complete:** ${PIPELINE_COMPLETE}" >> $GITHUB_STEP_SUMMARY
+            if [ -n "${NEXT_STAGE}" ]; then
+              echo "- **Next Stage:** ${NEXT_STAGE}" >> $GITHUB_STEP_SUMMARY
+            fi
+          elif [ "${STATUS}" = "unauthorized" ]; then
+            echo "- **Message:** ${MESSAGE}" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Issue was reopened due to unauthorized close attempt.**" >> $GITHUB_STEP_SUMMARY
+          fi

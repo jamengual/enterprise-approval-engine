@@ -9,6 +9,10 @@ Enterprise-grade GitHub Action for policy-based approval workflows with per-grou
 - **Mixed Approvers**: Combine individual users and GitHub teams in the same group
 - **Progressive Deployment Pipelines**: Single-issue tracking through multiple environments (dev → qa → stage → prod)
 - **Pipeline Visualization**: Color-coded Mermaid flowchart diagrams showing deployment progress
+- **Sub-Issue Approvals**: Create dedicated approval sub-issues for each stage - close to approve
+- **Enhanced Comments UX**: Emoji reactions on approval comments, Quick Actions section with command reference
+- **Issue Close Protection**: Prevent unauthorized users from closing approval issues (auto-reopen)
+- **Hybrid Approval Modes**: Mix comment-based and sub-issue approvals per workflow or stage
 - **PR and Commit Tracking**: Automatically list PRs and commits in deployment issues for release management
 - **Semver Tag Creation**: Automatically create git tags upon approval
 - **Policy-Based Configuration**: Define reusable approval policies in YAML
@@ -1008,6 +1012,95 @@ To disable the Mermaid diagram, set `show_mermaid_diagram: false` in the pipelin
 | `create_tag` | Create a git tag at this stage |
 | `is_final` | Close the issue after this stage |
 | `auto_approve` | Automatically approve this stage without human intervention |
+| `approval_mode` | Override workflow approval mode for this stage |
+
+#### Approval Modes
+
+Choose how approvers interact with approval requests:
+
+| Mode | Description |
+|------|-------------|
+| `comments` | (Default) Approvers comment `/approve` or `approve` on the issue |
+| `sub_issues` | Creates a sub-issue for each stage - close to approve |
+| `hybrid` | Mix modes per stage - use `approval_mode` on each stage |
+
+**Sub-Issue Approval Example:**
+
+```yaml
+workflows:
+  deploy:
+    approval_mode: sub_issues
+    sub_issue_settings:
+      title_template: "✅ Approve: {{stage}} for {{version}}"
+      labels: [approval-stage]
+      protection:
+        only_assignee_can_close: true   # Prevents unauthorized approvals
+        prevent_parent_close: true       # Parent can't close until all approved
+    pipeline:
+      stages:
+        - name: dev
+          policy: developers
+        - name: prod
+          policy: production-approvers
+```
+
+With sub-issues, the parent issue shows a table of approval sub-issues:
+
+```markdown
+### 📋 Approval Sub-Issues
+
+| Stage | Sub-Issue | Status | Assignees |
+|-------|-----------|--------|----------|
+| DEV | #124 | ⏳ Awaiting | @alice, @bob |
+| PROD | #125 | ⏳ Awaiting | @sre1, @sre2 |
+```
+
+**Hybrid Mode (per-stage override):**
+
+```yaml
+workflows:
+  deploy:
+    approval_mode: comments  # Default for this workflow
+    pipeline:
+      stages:
+        - name: dev
+          policy: developers
+          # Uses comments (workflow default)
+        - name: prod
+          policy: production-approvers
+          approval_mode: sub_issues  # Override for production only
+```
+
+#### Enhanced Comments UX
+
+The action includes enhanced comment-based approval UX:
+
+- **Emoji Reactions**: Automatic reactions on approval comments
+  - 👍 Approved
+  - 👎 Denied
+  - 👀 Seen (processing)
+
+- **Quick Actions Section**: Issue body includes a command reference table:
+
+```markdown
+### ⚡ Quick Actions
+
+| Action | Command | Description |
+|--------|---------|-------------|
+| ✅ Approve | `/approve` | Approve the **DEV** stage |
+| ❌ Deny | `/deny [reason]` | Deny with optional reason |
+| 📊 Status | `/status` | Show current approval status |
+```
+
+**Configure via `comment_settings`:**
+
+```yaml
+workflows:
+  deploy:
+    comment_settings:
+      react_to_comments: true     # Add emoji reactions (default: true)
+      show_quick_actions: true    # Show Quick Actions section (default: true)
+```
 
 #### Auto-Approve for Lower Environments
 

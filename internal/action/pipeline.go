@@ -452,6 +452,133 @@ func GeneratePipelineMermaid(state *IssueState, pipeline *config.PipelineConfig)
 	return sb.String()
 }
 
+// GeneratePipelineIssueBodyWithSubIssues generates the issue body including sub-issue links.
+func GeneratePipelineIssueBodyWithSubIssues(data *TemplateData, state *IssueState, pipeline *config.PipelineConfig, subIssues []SubIssueInfo) string {
+	var sb strings.Builder
+
+	sb.WriteString(fmt.Sprintf("## 🚀 Deployment Pipeline: %s\n\n", data.Version))
+	sb.WriteString(fmt.Sprintf("%s\n\n", data.Description))
+
+	// Pipeline Mermaid diagram for visual flow (if enabled)
+	if pipeline.ShouldShowMermaidDiagram() {
+		mermaidDiagram := GeneratePipelineMermaid(state, pipeline)
+		if mermaidDiagram != "" {
+			sb.WriteString("### Pipeline Flow\n\n")
+			sb.WriteString(mermaidDiagram)
+			sb.WriteString("\n")
+		}
+	}
+
+	// Sub-Issues Section (when using sub-issue approval mode)
+	if len(subIssues) > 0 {
+		sb.WriteString("### 📋 Approval Sub-Issues\n\n")
+		sb.WriteString("Each stage has a dedicated approval issue. **Close the issue** to approve that stage.\n\n")
+		sb.WriteString("| Stage | Sub-Issue | Status | Assignees |\n")
+		sb.WriteString("|-------|-----------|--------|----------|\n")
+
+		for _, si := range subIssues {
+			status := "⏳ Awaiting"
+			switch si.Status {
+			case "approved":
+				status = "✅ Approved"
+			case "denied":
+				status = "❌ Denied"
+			}
+
+			assignees := "-"
+			if len(si.Assignees) > 0 {
+				var formatted []string
+				for _, a := range si.Assignees {
+					formatted = append(formatted, "@"+a)
+				}
+				assignees = strings.Join(formatted, ", ")
+			}
+
+			sb.WriteString(fmt.Sprintf("| %s | #%d | %s | %s |\n",
+				strings.ToUpper(si.Stage), si.IssueNumber, status, assignees))
+		}
+		sb.WriteString("\n")
+	}
+
+	// Deployment progress table
+	sb.WriteString("### Deployment Progress\n\n")
+	sb.WriteString(GeneratePipelineTable(state, pipeline))
+	sb.WriteString("\n")
+
+	// Current stage info and Quick Actions
+	if state.CurrentStage < len(pipeline.Stages) {
+		stage := pipeline.Stages[state.CurrentStage]
+		sb.WriteString(fmt.Sprintf("**Current Stage:** %s\n\n", strings.ToUpper(stage.Name)))
+
+		// If using sub-issues, point to the sub-issue
+		if len(subIssues) > 0 {
+			for _, si := range subIssues {
+				if si.Stage == stage.Name && si.Status == "open" {
+					sb.WriteString(fmt.Sprintf("**Approve via:** Close sub-issue #%d\n\n", si.IssueNumber))
+					break
+				}
+			}
+		} else {
+			// Quick Actions section for comment-based approval
+			sb.WriteString("### ⚡ Quick Actions\n\n")
+			sb.WriteString("| Action | Command | Description |\n")
+			sb.WriteString("|--------|---------|-------------|\n")
+			sb.WriteString(fmt.Sprintf("| ✅ Approve | `/approve` | Approve the **%s** stage |\n", strings.ToUpper(stage.Name)))
+			sb.WriteString("| ❌ Deny | `/deny [reason]` | Deny with optional reason |\n")
+			sb.WriteString("| 📊 Status | `/status` | Show current approval status |\n")
+			sb.WriteString("\n")
+			sb.WriteString("**Alternative commands:** `approve`, `lgtm`, `yes` (for approval) or `deny`, `reject`, `no` (for denial)\n\n")
+		}
+	} else {
+		sb.WriteString("### ✅ Pipeline Complete\n\n")
+		sb.WriteString("All stages have been approved.\n\n")
+	}
+
+	sb.WriteString("---\n\n")
+
+	// Request info
+	sb.WriteString("### Request Information\n\n")
+	sb.WriteString(fmt.Sprintf("- **Requested by:** @%s\n", data.Requestor))
+	sb.WriteString(fmt.Sprintf("- **Version:** `%s`\n", data.Version))
+	if data.Branch != "" {
+		sb.WriteString(fmt.Sprintf("- **Branch:** `%s`\n", data.Branch))
+	}
+	if data.CommitSHA != "" {
+		shortSHA := data.CommitSHA
+		if len(shortSHA) > 7 {
+			shortSHA = shortSHA[:7]
+		}
+		sb.WriteString(fmt.Sprintf("- **Commit:** [%s](%s)\n", shortSHA, data.CommitURL))
+	}
+	sb.WriteString(fmt.Sprintf("- **Requested at:** %s\n", data.CreatedAt))
+	sb.WriteString("\n")
+
+	// PRs in release
+	if len(state.PRs) > 0 {
+		sb.WriteString("### Pull Requests in this Release\n\n")
+		sb.WriteString(GeneratePRTable(state.PRs))
+		sb.WriteString("\n")
+	}
+
+	// Commits in release
+	if len(state.Commits) > 0 {
+		sb.WriteString("### Commits\n\n")
+		sb.WriteString(GenerateCommitList(state.Commits))
+		sb.WriteString("\n")
+	}
+
+	// Append the hidden state marker
+	stateJSON, err := json.Marshal(state)
+	if err != nil {
+		return sb.String()
+	}
+	sb.WriteString("\n<!-- issueops-state:")
+	sb.WriteString(string(stateJSON))
+	sb.WriteString(" -->")
+
+	return sb.String()
+}
+
 // GeneratePipelineIssueBody generates the issue body for a pipeline workflow.
 func GeneratePipelineIssueBody(data *TemplateData, state *IssueState, pipeline *config.PipelineConfig) string {
 	var sb strings.Builder
@@ -474,11 +601,23 @@ func GeneratePipelineIssueBody(data *TemplateData, state *IssueState, pipeline *
 	sb.WriteString(GeneratePipelineTable(state, pipeline))
 	sb.WriteString("\n")
 
-	// Current stage info
+	// Current stage info and Quick Actions
 	if state.CurrentStage < len(pipeline.Stages) {
 		stage := pipeline.Stages[state.CurrentStage]
 		sb.WriteString(fmt.Sprintf("**Current Stage:** %s\n\n", strings.ToUpper(stage.Name)))
-		sb.WriteString("**To approve this stage:** Comment `approve`, `lgtm`, or `yes`\n\n")
+
+		// Quick Actions section - shows clear approval commands
+		sb.WriteString("### ⚡ Quick Actions\n\n")
+		sb.WriteString("| Action | Command | Description |\n")
+		sb.WriteString("|--------|---------|-------------|\n")
+		sb.WriteString(fmt.Sprintf("| ✅ Approve | `/approve` | Approve the **%s** stage |\n", strings.ToUpper(stage.Name)))
+		sb.WriteString("| ❌ Deny | `/deny [reason]` | Deny with optional reason |\n")
+		sb.WriteString("| 📊 Status | `/status` | Show current approval status |\n")
+		sb.WriteString("\n")
+		sb.WriteString("**Alternative commands:** `approve`, `lgtm`, `yes` (for approval) or `deny`, `reject`, `no` (for denial)\n\n")
+	} else {
+		sb.WriteString("### ✅ Pipeline Complete\n\n")
+		sb.WriteString("All stages have been approved.\n\n")
 	}
 
 	sb.WriteString("---\n\n")
