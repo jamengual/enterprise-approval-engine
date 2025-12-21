@@ -1,5 +1,5 @@
 name: 'Enterprise Approval Engine'
-description: 'Enterprise-grade approval workflows with per-group thresholds (X of N), OR logic between groups, and automatic semver tag creation'
+description: 'Enterprise approval workflows with per-group thresholds (X of N), OR logic, and semver tagging'
 author: 'jamengual'
 
 branding:
