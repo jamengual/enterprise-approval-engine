@@ -1,5 +1,8 @@
 # Enterprise Approval Engine
 
+[![en](https://img.shields.io/badge/lang-en-blue.svg)](README.md)
+[![es](https://img.shields.io/badge/lang-es-yellow.svg)](ES/README.md)
+
 Enterprise-grade GitHub Action for policy-based approval workflows with per-group thresholds (X of N), OR logic between groups, and automatic semver tag creation.
 
 ## Features
