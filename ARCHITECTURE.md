@@ -13,6 +13,31 @@ A GitHub Action for policy-based approval workflows with:
 
 ### Approval Model
 
+```mermaid
+flowchart TB
+    subgraph Request["Approval Request"]
+        direction TB
+        subgraph GroupA["Group A (dev-team)"]
+            A1[User 1] & A2[User 2] & A3[Team X]
+            A1 & A2 & A3 --> A4{min: 2}
+        end
+
+        subgraph GroupB["Group B (security)"]
+            B1[Team Y] & B2[Team Z]
+            B1 & B2 --> B4{min: 1}
+        end
+
+        subgraph GroupC["Group C (exec)"]
+            C1[User 3]
+            C1 --> C4{require_all}
+        end
+
+        A4 --> |OR| Result((Approved))
+        B4 --> |OR| Result
+        C4 --> |OR| Result
+    end
+```
+
 ```
 Approval Request
 ├── Group A (OR)         ← Any ONE group satisfying its requirement = approved
@@ -228,6 +253,27 @@ outputs:
 
 ## Workflow Patterns
 
+```mermaid
+flowchart TB
+    subgraph "Pattern 1: Blocking (Single Workflow)"
+        P1A[request-approval job] --> P1B[Create Issue]
+        P1B --> P1C[wait-for-approval job]
+        P1C --> P1D{Poll every 30s}
+        P1D -->|Pending| P1D
+        P1D -->|Approved| P1E[deploy job]
+        P1D -->|Denied/Timeout| P1F[Fail]
+    end
+
+    subgraph "Pattern 2: Event-Driven (Two Workflows)"
+        P2A[request-approval.yml] --> P2B[Create Issue]
+        P2B --> P2C[Workflow Exits]
+        P2C -.->|User comments| P2D[handle-approval.yml]
+        P2D --> P2E{Approved?}
+        P2E -->|Yes| P2F[Trigger deploy.yml]
+        P2E -->|No| P2G[Update Status]
+    end
+```
+
 ### Pattern 1: Request and Wait (Blocking)
 
 ```yaml
@@ -347,6 +393,41 @@ jobs:
 ---
 
 ## Implementation Architecture
+
+```mermaid
+flowchart TB
+    subgraph "GitHub Actions"
+        GHA[Workflow Trigger]
+    end
+
+    subgraph "Action Entrypoint"
+        MAIN[cmd/action/main.go]
+    end
+
+    subgraph "Core Packages"
+        CONFIG[config/]
+        APPROVAL[approval/]
+        GITHUB[github/]
+        SEMVER[semver/]
+        ACTION[action/]
+    end
+
+    subgraph "GitHub API"
+        ISSUES[Issues API]
+        TEAMS[Teams API]
+        TAGS[Refs API]
+    end
+
+    GHA --> MAIN
+    MAIN --> ACTION
+    ACTION --> CONFIG
+    ACTION --> APPROVAL
+    ACTION --> GITHUB
+    ACTION --> SEMVER
+    GITHUB --> ISSUES
+    GITHUB --> TEAMS
+    GITHUB --> TAGS
+```
 
 ### Components
 

@@ -58,6 +58,55 @@ Enterprise-grade GitHub Action for policy-based approval workflows with per-grou
 - [Schema Validation](#schema-validation)
 - [GitHub Enterprise Server](#github-enterprise-server)
 
+## How It Works
+
+```mermaid
+flowchart LR
+    subgraph "1. Request"
+        A[Developer] -->|Triggers| B[request-approval.yml]
+        B -->|Creates| C[Approval Issue]
+    end
+
+    subgraph "2. Approve"
+        C -->|Approvers comment| D[handle-approval.yml]
+        D -->|Validates| E{Policy Met?}
+    end
+
+    subgraph "3. Deploy"
+        E -->|Yes| F[Create Tag]
+        F --> G[Trigger Deploy]
+        E -->|No| H[Wait for more approvals]
+        H --> D
+    end
+```
+
+```mermaid
+sequenceDiagram
+    participant Dev as Developer
+    participant GHA as GitHub Actions
+    participant Issue as Approval Issue
+    participant Approver as Approver(s)
+    participant Repo as Repository
+
+    Dev->>GHA: Trigger request-approval workflow
+    GHA->>Issue: Create approval issue
+    GHA-->>Dev: Return issue URL
+
+    Note over Issue: Waiting for approvals...
+
+    Approver->>Issue: Comment "approve"
+    Issue->>GHA: Trigger handle-approval workflow
+    GHA->>GHA: Validate approver & check policy
+
+    alt Policy satisfied
+        GHA->>Repo: Create git tag
+        GHA->>Issue: Close issue
+        GHA->>GHA: Trigger deployment
+    else More approvals needed
+        GHA->>Issue: Update status comment
+    end
+```
+
 ## Quick Start
 
 ### 1. Create Configuration
@@ -384,6 +433,49 @@ policies:
 **Operator precedence:** AND binds tighter than OR (standard boolean logic).
 
 The expression `A and B or C and D` is evaluated as `(A AND B) OR (C AND D)`.
+
+#### Policy Logic Visualization
+
+```mermaid
+flowchart TB
+    subgraph "AND Logic (default)"
+        A1[Security Team<br/>min: 2] --> |AND| A2[Platform Team<br/>min: 1]
+        A2 --> |AND| A3[Tech Lead]
+        A3 --> A4((All must<br/>be satisfied))
+    end
+
+    subgraph "OR Logic"
+        B1[Security Team<br/>require_all] --> B4
+        B2[Platform Team<br/>min: 2] --> B4
+        B3[Executive<br/>any one] --> B4
+        B4((Any path<br/>satisfies))
+    end
+
+    subgraph "Mixed: (A AND B) OR C"
+        C1[Security<br/>min: 2] --> |AND| C2[Platform<br/>min: 2]
+        C2 --> |OR| C4
+        C3[Alice] --> C4((Approved))
+    end
+```
+
+```mermaid
+flowchart LR
+    subgraph "Workflow-Level OR Logic"
+        direction TB
+        REQ[require:]
+        P1[policy: dev-team<br/>2 of 3 devs]
+        P2[policy: platform-team<br/>all members]
+        P3[policy: exec-approval<br/>any executive]
+
+        REQ --> P1
+        REQ --> P2
+        REQ --> P3
+
+        P1 --> |OR| RESULT((Approved))
+        P2 --> |OR| RESULT
+        P3 --> |OR| RESULT
+    end
+```
 
 ### Workflows
 
@@ -822,6 +914,32 @@ jobs:
 **Required GitHub App permissions:**
 
 - `Organization > Members: Read` - To list team members
+
+```mermaid
+sequenceDiagram
+    participant User as Approver
+    participant Issue as Approval Issue
+    participant Action as Approval Engine
+    participant GitHubAPI as GitHub API
+    participant Org as GitHub Org
+
+    User->>Issue: Comment "approve"
+    Issue->>Action: Trigger handle-approval.yml
+
+    Action->>Action: Check if user in approvers list
+
+    alt User is individual approver
+        Action->>Action: Direct match ✓
+    else User in team:slug format
+        Action->>GitHubAPI: Get team members (App token)
+        GitHubAPI->>Org: List team:platform-engineers
+        Org-->>GitHubAPI: [alice, bob, charlie]
+        GitHubAPI-->>Action: Team members
+        Action->>Action: Check if user in team ✓
+    end
+
+    Action->>Issue: Update approval status
+```
 
 ### Progressive Deployment Pipelines
 
@@ -1477,6 +1595,45 @@ This displays rich issue information:
     # Output: [{"key":"PROJ-123","summary":"Fix login bug",...}]
 ```
 
+```mermaid
+flowchart LR
+    subgraph "Jira Integration Flow"
+        A[request action] --> B[Scan commits<br/>& branches]
+        B --> C{Found issue keys?<br/>e.g., PROJ-123}
+
+        C -->|Yes| D{Jira API<br/>credentials?}
+        C -->|No| E[No Jira section]
+
+        D -->|Links-only| F[Display as links]
+        D -->|Full mode| G[Fetch issue details]
+
+        G --> H[Display table with<br/>summary, status, type]
+        G --> I[Update Fix Version]
+    end
+```
+
+```mermaid
+sequenceDiagram
+    participant GHA as GitHub Actions
+    participant Commits as Git Commits
+    participant Jira as Jira API
+    participant Issue as Approval Issue
+
+    GHA->>Commits: Get commit messages
+    Commits-->>GHA: "Fix login [PROJ-123]", "Add feature [PROJ-456]"
+
+    GHA->>GHA: Extract issue keys with regex
+
+    alt Full Mode (with credentials)
+        GHA->>Jira: GET /rest/api/3/issue/PROJ-123
+        Jira-->>GHA: {summary, status, type}
+        GHA->>Jira: PUT /rest/api/3/issue (update Fix Version)
+        GHA->>Issue: Create table with details
+    else Links-Only Mode
+        GHA->>Issue: Create links list
+    end
+```
+
 ### Deployment Tracking
 
 Create GitHub deployments for visibility in GitHub's deployment dashboard. This works independently of the `environment:` key in workflow YAML.
@@ -1510,6 +1667,318 @@ Create GitHub deployments for visibility in GitHub's deployment dashboard. This 
 
 **Note:** This creates deployments via the GitHub Deployments API, which is separate from GitHub's native Environment Protection Rules. You can use both together or independently.
 
+```mermaid
+flowchart LR
+    subgraph "GitHub Deployments API Flow"
+        A[request action<br/>create_deployment: true] --> B[Create Deployment<br/>status: pending]
+        B --> C[Approval Issue Created]
+        C --> D{Approved?}
+
+        D -->|Yes| E[process-comment]
+        E --> F[Update Deployment<br/>status: success]
+
+        D -->|Denied| G[Update Deployment<br/>status: failure]
+    end
+
+    subgraph "GitHub UI"
+        H[Repository Page]
+        I[Deployments Tab]
+        J[Environment Badges]
+
+        F --> H
+        F --> I
+        F --> J
+        G --> I
+    end
+```
+
+### Environment Deployment Approval
+
+Integrate IssueOps approval with GitHub's native Environment Protection Rules. This allows you to:
+
+- Use GitHub Environments for secrets and deployment tracking
+- Require approval through your IssueOps workflow
+- Automatically approve pending environment deployments when IssueOps approves
+
+#### Two Integration Flows
+
+```mermaid
+flowchart TB
+    subgraph "Flow A: With Environment Required Reviewers"
+        A1[Workflow starts] --> A2[Job with environment: prod]
+        A2 --> A3[Job WAITING for approval]
+        A3 -.->|Meanwhile| A4[User approves IssueOps issue]
+        A4 --> A5[process-comment runs]
+        A5 --> A6[Calls GitHub API to approve environment]
+        A6 --> A7[Job proceeds with secrets]
+    end
+
+    subgraph "Flow B: IssueOps Only - No Required Reviewers"
+        B1[Request approval issue] --> B2[Wait for approval]
+        B2 -.->|Days/weeks later| B3[User approves issue]
+        B3 --> B4[Trigger deploy workflow]
+        B4 --> B5[environment: prod for secrets only]
+        B5 --> B6[Deploy immediately]
+    end
+
+    style A6 fill:#28a745,stroke:#1e7e34
+    style B6 fill:#28a745,stroke:#1e7e34
+```
+
+| Flow | Use Case | Environment Config | Max Approval Time |
+|------|----------|-------------------|-------------------|
+| **A** | Compliance requires GitHub's Built-in reviewers | Has Required Reviewers | 30 days (GitHub limit) |
+| **B** | Flexible, long approvals | No Required Reviewers | Unlimited |
+
+#### Flow A: With Environment Required Reviewers
+
+Use this when you need GitHub's built-in Required Reviewers AND want IssueOps to trigger the approval automatically.
+
+**Limitations:**
+
+- Requires a PAT from a user who is a Required Reviewer (GITHUB_TOKEN won't work)
+- 30-day maximum wait time (GitHub limit)
+- GitHub Apps cannot be Required Reviewers
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant DeployWorkflow as deploy.yml
+    participant GitHubEnv as GitHub Environment
+    participant ApprovalIssue as Approval Issue
+    participant HandleWorkflow as handle-approval.yml
+    participant GitHubAPI as GitHub API
+
+    User->>DeployWorkflow: Trigger deployment
+    DeployWorkflow->>ApprovalIssue: Create issue (track_pending_run: true)
+    Note over ApprovalIssue: Stores run_id in issue metadata
+    DeployWorkflow->>GitHubEnv: Job with environment: production
+    GitHubEnv-->>DeployWorkflow: WAITING for approval
+
+    Note over ApprovalIssue: Time passes...
+
+    User->>ApprovalIssue: Comment "approve"
+    ApprovalIssue->>HandleWorkflow: Trigger on issue_comment
+    HandleWorkflow->>HandleWorkflow: Process approval (IssueOps)
+    HandleWorkflow->>GitHubAPI: POST /pending_deployments (approve)
+    GitHubAPI-->>GitHubEnv: Approval granted
+    GitHubEnv-->>DeployWorkflow: Job proceeds with secrets
+```
+
+**deploy.yml (Flow A):**
+
+```yaml
+name: Deploy with Environment Approval
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        required: true
+
+jobs:
+  request-approval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jamengual/enterprise-approval-engine@v1
+        with:
+          action: request
+          workflow: production-deploy
+          version: ${{ inputs.version }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          track_pending_run: true  # Store run_id for later approval
+
+  deploy:
+    needs: request-approval
+    runs-on: ubuntu-latest
+    environment: production  # Has Required Reviewers
+    steps:
+      - run: echo "Deploying ${{ inputs.version }}"
+```
+
+**handle-approval.yml (Flow A):**
+
+```yaml
+name: Handle Approval
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  process:
+    if: contains(github.event.issue.labels.*.name, 'approval-required')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jamengual/enterprise-approval-engine@v1
+        with:
+          action: process-comment
+          issue_number: ${{ github.event.issue.number }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          # Also approve the pending environment deployment
+          approve_environment_deployment: true
+          environment_approval_token: ${{ secrets.REVIEWER_PAT }}
+```
+
+**Required Setup for Flow A:**
+
+1. Add a user as Required Reviewer on the environment
+2. Create a PAT for that user with `repo` scope
+3. Store the PAT as `REVIEWER_PAT` secret
+4. Configure `approve_environment_deployment: true` and `environment_approval_token`
+
+#### Flow B: IssueOps Only (Recommended for Long Approvals)
+
+Use this for quarterly deployments or any approval cycle >30 days. IssueOps is the sole approval gate.
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant RequestWorkflow as request-deployment.yml
+    participant ApprovalIssue as Approval Issue
+    participant HandleWorkflow as handle-approval.yml
+    participant DeployWorkflow as deploy.yml
+    participant GitHubEnv as GitHub Environment
+
+    User->>RequestWorkflow: Request deployment
+    RequestWorkflow->>ApprovalIssue: Create approval issue
+
+    Note over ApprovalIssue: Days/weeks/months pass...
+
+    User->>ApprovalIssue: Comment "approve"
+    ApprovalIssue->>HandleWorkflow: Trigger on issue_comment
+    HandleWorkflow->>HandleWorkflow: Process approval
+    HandleWorkflow->>DeployWorkflow: Trigger via workflow_dispatch
+    DeployWorkflow->>GitHubEnv: environment: production
+    Note over GitHubEnv: No Required Reviewers = no waiting
+    GitHubEnv-->>DeployWorkflow: Secrets available immediately
+    DeployWorkflow->>DeployWorkflow: Deploy
+```
+
+**Environment Settings (Flow B):**
+
+```text
+Environment: production
+├── Required reviewers: NONE (empty)
+├── Wait timer: 0
+├── Deployment branches: All (or specific)
+└── Secrets: PROD_API_KEY, PROD_DB_URL, etc.
+```
+
+**request-deployment.yml (Flow B):**
+
+```yaml
+name: Request Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        required: true
+
+jobs:
+  request:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jamengual/enterprise-approval-engine@v1
+        with:
+          action: request
+          workflow: production-deploy
+          version: ${{ inputs.version }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+```
+
+**handle-approval.yml (Flow B):**
+
+```yaml
+name: Handle Approval
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  process:
+    if: contains(github.event.issue.labels.*.name, 'approval-required')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jamengual/enterprise-approval-engine@v1
+        id: process
+        with:
+          action: process-comment
+          issue_number: ${{ github.event.issue.number }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Trigger deployment after approval
+      - name: Trigger Deployment
+        if: steps.process.outputs.status == 'approved'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh workflow run deploy.yml \
+            -f version=${{ steps.process.outputs.tag }} \
+            -f approval_issue=${{ github.event.issue.number }}
+```
+
+**deploy.yml (Flow B):**
+
+```yaml
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        required: true
+      approval_issue:
+        required: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production  # For secrets only, no approval gate
+    steps:
+      - uses: actions/checkout@v4
+
+      # Optional: Verify approval status
+      - uses: jamengual/enterprise-approval-engine@v1
+        id: verify
+        with:
+          action: check
+          issue_number: ${{ inputs.approval_issue }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify Approval
+        if: steps.verify.outputs.status != 'approved'
+        run: |
+          echo "::error::Issue #${{ inputs.approval_issue }} is not approved!"
+          exit 1
+
+      - name: Deploy
+        run: echo "Deploying ${{ inputs.version }}"
+        env:
+          PROD_API_KEY: ${{ secrets.PROD_API_KEY }}
+```
+
+#### Environment Approval Inputs
+
+| Input | Description | Required | Default |
+|-------|-------------|----------|---------|
+| `track_pending_run` | Store run ID for later environment approval (Flow A) | No | `false` |
+| `approve_environment_deployment` | Also approve pending environment deployment | No | `false` |
+| `environment_approval_token` | PAT from a Required Reviewer | No | Uses main token |
+
+#### Environment Approval Outputs
+
+| Output | Description |
+|--------|-------------|
+| `pending_run_id` | Workflow run ID stored for environment approval |
+| `environment_deployment_approved` | Whether environment deployment was approved |
+
 ### External Config Repository
 
 Store approval configs in a shared repository for centralized policy management:
@@ -1536,6 +2005,29 @@ myorg/.github/
 ├── myapp_approvals.yml      # App-specific config
 ├── backend_approvals.yml    # Backend repos config
 └── approvals.yml            # Default for all repos
+```
+
+```mermaid
+flowchart TB
+    subgraph "External Config Resolution"
+        A[Approval Action] --> B{config_repo set?}
+
+        B -->|No| C[Load .github/approvals.yml<br/>from current repo]
+
+        B -->|Yes| D[Check external repo]
+        D --> E{repo-name_approvals.yml<br/>exists?}
+        E -->|Yes| F[Load app-specific config]
+        E -->|No| G{approvals.yml exists?}
+        G -->|Yes| H[Load shared config]
+        G -->|No| C
+    end
+
+    subgraph "Example: myapp repo"
+        direction LR
+        I[myorg/.github/myapp_approvals.yml] --> |Priority 1| J((Config))
+        K[myorg/.github/approvals.yml] --> |Priority 2| J
+        L[myapp/.github/approvals.yml] --> |Priority 3| J
+    end
 ```
 
 ### Blocking Approvals
@@ -1595,6 +2087,44 @@ jobs:
 ```
 
 **Note:** Blocking workflows keep the runner active, which consumes GitHub Actions minutes. For cost-sensitive scenarios, use the event-driven approach (separate `process-comment` workflow).
+
+```mermaid
+flowchart LR
+    subgraph "Blocking Approval Pattern"
+        A[request-approval job] --> B[Create Issue]
+        B --> C[wait-for-approval job]
+        C --> D{Poll with<br/>wait: true}
+
+        D -->|Pending| E[Sleep 30s]
+        E --> D
+
+        D -->|Approved| F[deploy job]
+        D -->|Denied| G[Workflow fails]
+        D -->|Timeout| G
+    end
+```
+
+```mermaid
+sequenceDiagram
+    participant Workflow as GitHub Workflow
+    participant Issue as Approval Issue
+    participant Approver as Approver
+
+    Workflow->>Issue: Create approval issue
+    Workflow->>Workflow: Start polling (wait: true)
+
+    loop Every 30 seconds
+        Workflow->>Issue: Check status
+        Issue-->>Workflow: pending
+    end
+
+    Approver->>Issue: Comment "approve"
+
+    Workflow->>Issue: Check status
+    Issue-->>Workflow: approved
+
+    Workflow->>Workflow: Proceed to deploy job
+```
 
 ### Tag Deletion on Issue Close
 

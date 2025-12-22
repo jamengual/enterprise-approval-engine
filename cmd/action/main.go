@@ -80,9 +80,10 @@ func handleRequest(ctx context.Context, handler *action.Handler) error {
 	}
 
 	input := action.RequestInput{
-		Workflow:    workflow,
-		Version:     action.GetInput("version"),
-		Environment: action.GetInput("environment"),
+		Workflow:        workflow,
+		Version:         action.GetInput("version"),
+		Environment:     action.GetInput("environment"),
+		TrackPendingRun: action.GetInputBool("track_pending_run"),
 	}
 
 	output, err := handler.Request(ctx, input)
@@ -91,12 +92,20 @@ func handleRequest(ctx context.Context, handler *action.Handler) error {
 	}
 
 	fmt.Printf("Created approval issue #%d: %s\n", output.IssueNumber, output.IssueURL)
+	if output.PendingRunID > 0 {
+		fmt.Printf("Tracking pending run ID: %d (for environment deployment approval)\n", output.PendingRunID)
+	}
 
-	return action.SetOutputs(map[string]string{
+	outputs := map[string]string{
 		"issue_number": fmt.Sprintf("%d", output.IssueNumber),
 		"issue_url":    output.IssueURL,
 		"status":       "pending",
-	})
+	}
+	if output.PendingRunID > 0 {
+		outputs["pending_run_id"] = fmt.Sprintf("%d", output.PendingRunID)
+	}
+
+	return action.SetOutputs(outputs)
 }
 
 func handleCheck(ctx context.Context, handler *action.Handler) error {
@@ -166,10 +175,12 @@ func handleProcessComment(ctx context.Context, handler *action.Handler) error {
 	}
 
 	input := action.ProcessCommentInput{
-		IssueNumber: issueNumber,
-		CommentID:   commentID,
-		CommentUser: commentUser,
-		CommentBody: commentBody,
+		IssueNumber:                  issueNumber,
+		CommentID:                    commentID,
+		CommentUser:                  commentUser,
+		CommentBody:                  commentBody,
+		ApproveEnvironmentDeployment: action.GetInputBool("approve_environment_deployment"),
+		EnvironmentApprovalToken:     action.GetInput("environment_approval_token"),
 	}
 
 	output, err := handler.ProcessComment(ctx, input)
@@ -187,13 +198,17 @@ func handleProcessComment(ctx context.Context, handler *action.Handler) error {
 	if output.Tag != "" {
 		fmt.Printf("Created tag: %s\n", output.Tag)
 	}
+	if output.EnvironmentDeploymentApproved {
+		fmt.Printf("Environment deployment approved: yes\n")
+	}
 
 	return action.SetOutputs(map[string]string{
-		"status":          output.Status,
-		"approvers":       strings.Join(output.Approvers, ","),
-		"denier":          output.Denier,
-		"satisfied_group": output.SatisfiedGroup,
-		"tag":             output.Tag,
+		"status":                        output.Status,
+		"approvers":                     strings.Join(output.Approvers, ","),
+		"denier":                        output.Denier,
+		"satisfied_group":               output.SatisfiedGroup,
+		"tag":                           output.Tag,
+		"environment_deployment_approved": fmt.Sprintf("%t", output.EnvironmentDeploymentApproved),
 	})
 }
 

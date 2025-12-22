@@ -72,15 +72,17 @@ func NewHandlerWithOptions(ctx context.Context, opts HandlerOptions) (*Handler, 
 
 // RequestInput contains inputs for the request action.
 type RequestInput struct {
-	Workflow    string
-	Version     string
-	Environment string
+	Workflow        string
+	Version         string
+	Environment     string
+	TrackPendingRun bool // Store run ID for later environment deployment approval
 }
 
 // RequestOutput contains outputs from the request action.
 type RequestOutput struct {
-	IssueNumber int
-	IssueURL    string
+	IssueNumber  int
+	IssueURL     string
+	PendingRunID int64 // Workflow run ID stored for environment deployment approval
 }
 
 // Request creates an approval request issue.
@@ -156,6 +158,16 @@ func (h *Handler) Request(ctx context.Context, input RequestInput) (*RequestOutp
 		},
 	}
 
+	// Track pending run ID for environment deployment approval (Flow A)
+	var pendingRunID int64
+	if input.TrackPendingRun && runID != "" {
+		if id, err := strconv.ParseInt(runID, 10, 64); err == nil {
+			pendingRunID = id
+			templateData.State.PendingRunID = pendingRunID
+			templateData.State.PendingRunURL = runURL
+		}
+	}
+
 	// For pipeline workflows, fetch PR/commit tracking data
 	var body string
 	if workflow.IsPipeline() {
@@ -215,8 +227,9 @@ func (h *Handler) Request(ctx context.Context, input RequestInput) (*RequestOutp
 	}
 
 	return &RequestOutput{
-		IssueNumber: issue.Number,
-		IssueURL:    issue.HTMLURL,
+		IssueNumber:  issue.Number,
+		IssueURL:     issue.HTMLURL,
+		PendingRunID: pendingRunID,
 	}, nil
 }
 
@@ -374,19 +387,22 @@ func (h *Handler) Check(ctx context.Context, input CheckInput) (*CheckOutput, er
 
 // ProcessCommentInput contains inputs for the process-comment action.
 type ProcessCommentInput struct {
-	IssueNumber int
-	CommentID   int64
-	CommentUser string
-	CommentBody string
+	IssueNumber                  int
+	CommentID                    int64
+	CommentUser                  string
+	CommentBody                  string
+	ApproveEnvironmentDeployment bool   // Also approve pending environment deployment
+	EnvironmentApprovalToken     string // PAT for approving (must be Required Reviewer)
 }
 
 // ProcessCommentOutput contains outputs from the process-comment action.
 type ProcessCommentOutput struct {
-	Status         string
-	Approvers      []string
-	Denier         string
-	SatisfiedGroup string
-	Tag            string
+	Status                       string
+	Approvers                    []string
+	Denier                       string
+	SatisfiedGroup               string
+	Tag                          string
+	EnvironmentDeploymentApproved bool // Whether environment deployment was also approved
 }
 
 // ReactionType defines the type of reaction to add to a comment.
@@ -480,6 +496,17 @@ func (h *Handler) ProcessComment(ctx context.Context, input ProcessCommentInput)
 
 	// Handle approval
 	if result.Status == approval.StatusApproved {
+		// Approve environment deployment if configured (Flow A)
+		if input.ApproveEnvironmentDeployment && state.PendingRunID > 0 {
+			envApproved, err := h.approveEnvironmentDeployment(ctx, state, input)
+			if err != nil {
+				// Log warning but don't fail the IssueOps approval
+				_ = h.client.CreateComment(ctx, input.IssueNumber,
+					fmt.Sprintf("**Warning:** Failed to approve environment deployment: %v\n\nThe IssueOps approval succeeded, but you may need to manually approve the environment deployment.", err))
+			} else if envApproved {
+				output.EnvironmentDeploymentApproved = true
+			}
+		}
 		// Post approval comment
 		if workflow.OnApproved.Comment != "" {
 			comment := ReplaceTemplateVars(workflow.OnApproved.Comment, map[string]string{
@@ -1148,4 +1175,58 @@ func calculateNextVersion(currentVersion, strategy string) string {
 		return ""
 	}
 	return nextVersion
+}
+
+// approveEnvironmentDeployment approves pending GitHub environment deployments for the workflow run
+// stored in the issue state. This implements Flow A where IssueOps approval also triggers
+// GitHub environment deployment approval.
+func (h *Handler) approveEnvironmentDeployment(ctx context.Context, state *IssueState, input ProcessCommentInput) (bool, error) {
+	if state.PendingRunID == 0 {
+		return false, nil // No pending run to approve
+	}
+
+	// Create a client with the environment approval token if provided
+	var envClient *github.Client
+	var err error
+
+	if input.EnvironmentApprovalToken != "" {
+		envClient, err = github.NewClientWithToken(ctx, input.EnvironmentApprovalToken, h.client.Owner(), h.client.Repo())
+		if err != nil {
+			return false, fmt.Errorf("failed to create client with environment approval token: %w", err)
+		}
+	} else {
+		// Use the existing client (may not work if GITHUB_TOKEN doesn't have reviewer permissions)
+		envClient = h.client
+	}
+
+	// Check if the run is still waiting
+	isWaiting, err := envClient.IsRunWaiting(ctx, state.PendingRunID)
+	if err != nil {
+		return false, fmt.Errorf("failed to check run status: %w", err)
+	}
+	if !isWaiting {
+		// Run is no longer waiting, nothing to approve
+		return false, nil
+	}
+
+	// Get pending deployments
+	pending, err := envClient.GetPendingDeployments(ctx, state.PendingRunID)
+	if err != nil {
+		return false, fmt.Errorf("failed to get pending deployments: %w", err)
+	}
+	if len(pending) == 0 {
+		return false, nil // No pending deployments
+	}
+
+	// Approve the environment deployment
+	comment := fmt.Sprintf("Approved via Enterprise Approval Engine - Issue #%d", input.IssueNumber)
+	err = envClient.ApproveEnvironmentDeployment(ctx, github.ApproveEnvironmentDeploymentOptions{
+		RunID:   state.PendingRunID,
+		Comment: comment,
+	})
+	if err != nil {
+		return false, err
+	}
+
+	return true, nil
 }

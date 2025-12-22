@@ -46,6 +46,10 @@ type IssueState struct {
 	// Sub-issue tracking (when using approval_mode: sub_issues)
 	SubIssues    []SubIssueInfo `json:"sub_issues,omitempty"`     // Sub-issues created for stages
 	ApprovalMode string         `json:"approval_mode,omitempty"`  // "comments", "sub_issues", or "hybrid"
+
+	// Environment deployment approval (Flow A)
+	PendingRunID  int64  `json:"pending_run_id,omitempty"`  // Workflow run ID waiting for environment approval
+	PendingRunURL string `json:"pending_run_url,omitempty"` // URL to the waiting workflow run
 }
 
 // SubIssueInfo tracks a sub-issue created for stage approval.
