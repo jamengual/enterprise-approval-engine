@@ -1,0 +1,77 @@
+# Flow A: Handle Approval Comments with Environment Approval
+#
+# This workflow processes approval comments and ALSO approves
+# pending GitHub environment deployments.
+#
+# Prerequisites:
+# 1. REVIEWER_PAT secret: PAT from a user who is a Required Reviewer
+#    on the environment, with `repo` scope
+#
+# When a user comments "approve" on an approval issue:
+# 1. Validates the user is an authorized approver (IssueOps)
+# 2. If all IssueOps requirements are met:
+#    - Creates git tag (if configured)
+#    - Closes issue (if configured)
+#    - Approves pending environment deployment via GitHub API
+# 3. The waiting deploy job (from flow-a-deploy-with-env-approval.yml) proceeds
+
+name: "Flow A: Handle Approval with Environment"
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  process:
+    # Only run on issues (not PRs) with approval-required label
+    if: |
+      github.event.issue.pull_request == null &&
+      contains(github.event.issue.labels.*.name, 'approval-required')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Process Approval Comment
+        uses: ./
+        id: process
+        with:
+          action: process-comment
+          issue_number: ${{ github.event.issue.number }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          # Enable environment deployment approval
+          approve_environment_deployment: true
+          # PAT from a Required Reviewer on the environment
+          # This is needed because GITHUB_TOKEN cannot approve environments
+          environment_approval_token: ${{ secrets.REVIEWER_PAT }}
+
+      - name: Handle Result
+        env:
+          STATUS: ${{ steps.process.outputs.status }}
+          APPROVERS: ${{ steps.process.outputs.approvers }}
+          DENIER: ${{ steps.process.outputs.denier }}
+          TAG: ${{ steps.process.outputs.tag }}
+          GROUP: ${{ steps.process.outputs.satisfied_group }}
+          ENV_APPROVED: ${{ steps.process.outputs.environment_deployment_approved }}
+        run: |
+          echo "## Approval Processing Result" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status:** ${STATUS}" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${STATUS}" = "approved" ]; then
+            echo "- **Approvers:** ${APPROVERS}" >> $GITHUB_STEP_SUMMARY
+            echo "- **Satisfied Group:** ${GROUP}" >> $GITHUB_STEP_SUMMARY
+            if [ -n "${TAG}" ]; then
+              echo "- **Tag Created:** ${TAG}" >> $GITHUB_STEP_SUMMARY
+            fi
+            if [ "${ENV_APPROVED}" = "true" ]; then
+              echo "- **Environment Deployment:** Approved via API" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "The waiting deploy job should now proceed automatically." >> $GITHUB_STEP_SUMMARY
+            fi
+          elif [ "${STATUS}" = "denied" ]; then
+            echo "- **Denied by:** ${DENIER}" >> $GITHUB_STEP_SUMMARY
+          fi

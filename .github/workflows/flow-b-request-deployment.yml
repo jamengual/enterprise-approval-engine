@@ -1,0 +1,77 @@
+# Flow B: Request Deployment (IssueOps Only)
+#
+# This workflow demonstrates IssueOps as the SOLE approval gate,
+# without using GitHub's environment Required Reviewers.
+#
+# Advantages:
+# - NO 30-day timeout limit (perfect for quarterly deployments)
+# - No PAT required (GITHUB_TOKEN works)
+# - Simpler setup
+#
+# Flow:
+# 1. User triggers this workflow to request deployment
+# 2. Creates approval issue and exits (non-blocking)
+# 3. User comments "approve" on the issue (days/weeks/months later)
+# 4. handle-approval workflow triggers the deploy workflow
+# 5. Deploy workflow runs with environment secrets (no Required Reviewers)
+#
+# Environment Setup:
+# - Required Reviewers: NONE (empty)
+# - Wait timer: 0
+# - Deployment branches: As needed
+# - Secrets: Your production secrets
+
+name: "Flow B: Request Deployment"
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to deploy (e.g., v1.2.0)'
+        required: true
+        type: string
+      environment:
+        description: 'Target environment'
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  request:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Request Approval
+        uses: ./
+        id: approval
+        with:
+          action: request
+          workflow: ${{ inputs.environment }}-deploy
+          version: ${{ inputs.version }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          # Note: NO track_pending_run needed for Flow B
+          # The deploy workflow will be triggered separately after approval
+
+      - name: Summary
+        run: |
+          echo "## Deployment Request Created" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Issue:** #${{ steps.approval.outputs.issue_number }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **URL:** ${{ steps.approval.outputs.issue_url }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version:** ${{ inputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment:** ${{ inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "1. Wait for approvers to review the request" >> $GITHUB_STEP_SUMMARY
+          echo "2. Approvers comment \`approve\` on the issue" >> $GITHUB_STEP_SUMMARY
+          echo "3. Deployment will be triggered automatically" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Note:** There is no timeout - approval can happen anytime." >> $GITHUB_STEP_SUMMARY
