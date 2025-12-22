@@ -1,0 +1,105 @@
+# Flow A: Deploy with Environment Required Reviewers + IssueOps
+#
+# This workflow demonstrates how to combine GitHub's native environment
+# protection (Required Reviewers) with IssueOps approval.
+#
+# Prerequisites:
+# 1. Create a GitHub Environment named "production" with Required Reviewers
+# 2. Create a PAT for one of the Required Reviewers with `repo` scope
+# 3. Store the PAT as REVIEWER_PAT secret
+#
+# Flow:
+# 1. User triggers this workflow
+# 2. Creates approval issue AND starts deploy job
+# 3. Deploy job WAITS at environment protection
+# 4. User comments "approve" on the issue
+# 5. handle-approval workflow approves BOTH IssueOps AND GitHub environment
+# 6. Deploy job proceeds with secrets
+#
+# Limitation: 30-day max wait (GitHub's environment protection limit)
+
+name: "Flow A: Deploy with Environment Approval"
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to deploy (e.g., v1.2.0)'
+        required: true
+        type: string
+      environment:
+        description: 'Target environment'
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  # Job 1: Create the approval issue and store run_id
+  request-approval:
+    runs-on: ubuntu-latest
+    outputs:
+      issue_number: ${{ steps.approval.outputs.issue_number }}
+      issue_url: ${{ steps.approval.outputs.issue_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Request Approval
+        uses: ./
+        id: approval
+        with:
+          action: request
+          workflow: ${{ inputs.environment }}-deploy
+          version: ${{ inputs.version }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          # Store the current run_id in issue metadata
+          # This allows process-comment to approve the environment deployment
+          track_pending_run: true
+
+      - name: Summary
+        run: |
+          echo "## Approval Request Created" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Issue:** #${{ steps.approval.outputs.issue_number }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **URL:** ${{ steps.approval.outputs.issue_url }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Pending Run ID:** ${{ github.run_id }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The deploy job is waiting for environment approval." >> $GITHUB_STEP_SUMMARY
+          echo "Comment \`approve\` on the issue to proceed." >> $GITHUB_STEP_SUMMARY
+
+  # Job 2: Deploy - will WAIT at the environment protection
+  deploy:
+    needs: request-approval
+    runs-on: ubuntu-latest
+    # This environment has Required Reviewers configured
+    # The job will pause here until approved via:
+    # 1. GitHub UI, OR
+    # 2. API call from handle-approval workflow
+    environment: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy
+        env:
+          VERSION: ${{ inputs.version }}
+          ENVIRONMENT: ${{ inputs.environment }}
+          # These secrets are only available after environment approval
+          # PROD_API_KEY: ${{ secrets.PROD_API_KEY }}
+        run: |
+          echo "Deploying version ${VERSION} to ${ENVIRONMENT}"
+          echo "Environment secrets are now available!"
+          # Your actual deployment commands here
+          # e.g., kubectl apply, terraform apply, etc.
+
+      - name: Deployment Summary
+        run: |
+          echo "## Deployment Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version:** ${{ inputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment:** ${{ inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Approval Issue:** #${{ needs.request-approval.outputs.issue_number }}" >> $GITHUB_STEP_SUMMARY

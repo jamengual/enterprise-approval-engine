@@ -1,0 +1,134 @@
+# Flow B: Handle Approval Comments (IssueOps Only)
+#
+# This workflow processes approval comments and triggers the deploy
+# workflow when approval is granted.
+#
+# No PAT required - uses GITHUB_TOKEN for everything.
+#
+# When a user comments "approve" on an approval issue:
+# 1. Validates the user is an authorized approver
+# 2. If all requirements are met:
+#    - Creates git tag (if configured)
+#    - Closes issue (if configured)
+#    - Triggers the deploy workflow via workflow_dispatch
+
+name: "Flow B: Handle Approval"
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  issues: write
+  actions: write  # Required to trigger workflows
+
+jobs:
+  process:
+    # Only run on issues (not PRs) with approval-required label
+    if: |
+      github.event.issue.pull_request == null &&
+      contains(github.event.issue.labels.*.name, 'approval-required')
+    runs-on: ubuntu-latest
+    outputs:
+      status: ${{ steps.process.outputs.status }}
+      tag: ${{ steps.process.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Process Approval Comment
+        uses: ./
+        id: process
+        with:
+          action: process-comment
+          issue_number: ${{ github.event.issue.number }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          # Note: NO approve_environment_deployment for Flow B
+          # We trigger deployment separately after IssueOps approval
+
+      - name: Handle Result
+        env:
+          STATUS: ${{ steps.process.outputs.status }}
+          APPROVERS: ${{ steps.process.outputs.approvers }}
+          DENIER: ${{ steps.process.outputs.denier }}
+          TAG: ${{ steps.process.outputs.tag }}
+          GROUP: ${{ steps.process.outputs.satisfied_group }}
+        run: |
+          echo "## Approval Processing Result" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status:** ${STATUS}" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${STATUS}" = "approved" ]; then
+            echo "- **Approvers:** ${APPROVERS}" >> $GITHUB_STEP_SUMMARY
+            echo "- **Satisfied Group:** ${GROUP}" >> $GITHUB_STEP_SUMMARY
+            if [ -n "${TAG}" ]; then
+              echo "- **Tag Created:** ${TAG}" >> $GITHUB_STEP_SUMMARY
+            fi
+          elif [ "${STATUS}" = "denied" ]; then
+            echo "- **Denied by:** ${DENIER}" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  # Trigger deployment when approved
+  trigger-deploy:
+    needs: process
+    if: needs.process.outputs.status == 'approved'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Extract Version from Tag
+        id: extract
+        env:
+          TAG: ${{ needs.process.outputs.tag }}
+        run: |
+          # Extract version from tag (remove 'v' prefix if present)
+          VERSION="${TAG#v}"
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Extracted version: ${VERSION}"
+
+      - name: Trigger Deploy Workflow
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // Get the issue to extract environment from labels
+            const issue = await github.rest.issues.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number
+            });
+
+            // Determine environment from labels (require explicit label)
+            const labels = issue.data.labels.map(l => l.name);
+            const hasStaging = labels.includes('staging');
+            const hasProduction = labels.includes('production');
+
+            if (!hasStaging && !hasProduction) {
+              core.setFailed('No environment label found. Add "staging" or "production" label to the issue.');
+              return;
+            }
+            if (hasStaging && hasProduction) {
+              core.setFailed('Multiple environment labels found. Use only one of "staging" or "production".');
+              return;
+            }
+
+            const environment = hasStaging ? 'staging' : 'production';
+
+            // Trigger the deploy workflow
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'flow-b-deploy.yml',
+              ref: 'main',
+              inputs: {
+                version: '${{ steps.extract.outputs.version }}',
+                environment: environment,
+                approval_issue: String(context.issue.number)
+              }
+            });
+
+            console.log(`Triggered deploy workflow for ${environment}`);
+
+      - name: Summary
+        run: |
+          echo "## Deploy Workflow Triggered" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The deploy workflow has been triggered automatically." >> $GITHUB_STEP_SUMMARY
+          echo "Check the Actions tab for deployment progress." >> $GITHUB_STEP_SUMMARY

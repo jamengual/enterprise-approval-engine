@@ -1,0 +1,84 @@
+# Flow B: Deploy Workflow (IssueOps Only)
+#
+# This workflow is triggered by handle-approval after IssueOps approval.
+# It uses GitHub environments for secrets but NO Required Reviewers.
+#
+# Environment Setup:
+# - Required Reviewers: NONE (empty) - IssueOps is the approval gate
+# - Wait timer: 0
+# - Deployment branches: All or specific branches
+# - Secrets: Your production secrets (PROD_API_KEY, etc.)
+
+name: "Flow B: Deploy"
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to deploy'
+        required: true
+        type: string
+      environment:
+        description: 'Target environment'
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+      approval_issue:
+        description: 'Approval issue number (for reference)'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  deployments: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # Environment for secrets only - NO Required Reviewers
+    # Secrets become available immediately (no waiting)
+    environment:
+      name: ${{ inputs.environment }}
+      url: https://example.com/${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy
+        env:
+          VERSION: ${{ inputs.version }}
+          ENVIRONMENT: ${{ inputs.environment }}
+          # These secrets are available immediately
+          # because there are no Required Reviewers
+          # PROD_API_KEY: ${{ secrets.PROD_API_KEY }}
+          # PROD_DB_URL: ${{ secrets.PROD_DB_URL }}
+        run: |
+          echo "Deploying version ${VERSION} to ${ENVIRONMENT}"
+          echo "Environment secrets are available!"
+
+          # Your actual deployment commands here
+          # Examples:
+          # - kubectl apply -f k8s/
+          # - terraform apply -auto-approve
+          # - aws ecs update-service ...
+          # - helm upgrade ...
+
+          echo "Deployment complete!"
+
+      - name: Deployment Summary
+        run: |
+          echo "## Deployment Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version:** ${{ inputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment:** ${{ inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          if [ -n "${{ inputs.approval_issue }}" ]; then
+            echo "- **Approval Issue:** #${{ inputs.approval_issue }}" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Flow B Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "This deployment was approved via IssueOps with:" >> $GITHUB_STEP_SUMMARY
+          echo "- No 30-day timeout limit" >> $GITHUB_STEP_SUMMARY
+          echo "- No Required Reviewers on environment" >> $GITHUB_STEP_SUMMARY
+          echo "- Full audit trail in GitHub Issues" >> $GITHUB_STEP_SUMMARY

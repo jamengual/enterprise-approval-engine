@@ -58,6 +58,32 @@ Enterprise-grade GitHub Action for policy-based approval workflows with per-grou
 - [Schema Validation](#schema-validation)
 - [GitHub Enterprise Server](#github-enterprise-server)
 
+## How It Works
+
+<iframe
+  src="https://fanfa.dev/e/FLGAk9llWZSbrRxw.HdhOR95M7FPCzsU_WmhB6JyAXMO0n9T6Jnu1tfF-cks"
+  width="800"
+  height="600"
+  frameborder="0"
+  loading="lazy"
+  sandbox="allow-scripts allow-same-origin allow-forms"
+  title="How It Works - Flowchart"
+  allow="fullscreen"
+  style="border: 1px solid #e2e8f0; border-radius: 8px;"
+></iframe>
+
+<iframe
+  src="https://fanfa.dev/e/mDEkHrPrsvxmjJNz.kmEvY0xn_ygh2EPB-V30V1gkqH2zeaRTTtLavAG8jqQ"
+  width="800"
+  height="600"
+  frameborder="0"
+  loading="lazy"
+  sandbox="allow-scripts allow-same-origin allow-forms"
+  title="How It Works - Sequence"
+  allow="fullscreen"
+  style="border: 1px solid #e2e8f0; border-radius: 8px;"
+></iframe>
+
 ## Quick Start
 
 ### 1. Create Configuration
@@ -384,6 +410,32 @@ policies:
 **Operator precedence:** AND binds tighter than OR (standard boolean logic).
 
 The expression `A and B or C and D` is evaluated as `(A AND B) OR (C AND D)`.
+
+#### Policy Logic Visualization
+
+<iframe
+  src="https://fanfa.dev/e/MJ50YiB5fVTYYJ8Y.6TFCbwhnFb0ajDwOIkKd0wjYXJVFxMcP1IYGxxsK1GU"
+  width="800"
+  height="600"
+  frameborder="0"
+  loading="lazy"
+  sandbox="allow-scripts allow-same-origin allow-forms"
+  title="Policy Logic - AND/OR"
+  allow="fullscreen"
+  style="border: 1px solid #e2e8f0; border-radius: 8px;"
+></iframe>
+
+<iframe
+  src="https://fanfa.dev/e/FJx0rldGQOS5MaiJ.YoFDj8z5m-n7j1C_lqz05D8nhPBPmXaEm1plKeRPoHY"
+  width="800"
+  height="600"
+  frameborder="0"
+  loading="lazy"
+  sandbox="allow-scripts allow-same-origin allow-forms"
+  title="Workflow-Level OR Logic"
+  allow="fullscreen"
+  style="border: 1px solid #e2e8f0; border-radius: 8px;"
+></iframe>
 
 ### Workflows
 
@@ -822,6 +874,18 @@ jobs:
 **Required GitHub App permissions:**
 
 - `Organization > Members: Read` - To list team members
+
+<iframe
+  src="https://fanfa.dev/e/aGhj4Z88OAi7GTBo.aH6JNfN7g5BT4PxNCSIhsdBVlvHkrWdLXEpNX-iMrU0"
+  width="800"
+  height="600"
+  frameborder="0"
+  loading="lazy"
+  sandbox="allow-scripts allow-same-origin allow-forms"
+  title="Team Support - Sequence"
+  allow="fullscreen"
+  style="border: 1px solid #e2e8f0; border-radius: 8px;"
+></iframe>
 
 ### Progressive Deployment Pipelines
 
@@ -1477,6 +1541,30 @@ This displays rich issue information:
     # Output: [{"key":"PROJ-123","summary":"Fix login bug",...}]
 ```
 
+<iframe
+  src="https://fanfa.dev/e/eMRlOKHVI9Wkynkt.ySSPB0zkc08Bpwco_xr00sAzeD62ZzwIxD-LGbh-Vj4"
+  width="800"
+  height="600"
+  frameborder="0"
+  loading="lazy"
+  sandbox="allow-scripts allow-same-origin allow-forms"
+  title="Jira Integration - Flowchart"
+  allow="fullscreen"
+  style="border: 1px solid #e2e8f0; border-radius: 8px;"
+></iframe>
+
+<iframe
+  src="https://fanfa.dev/e/yTaJkN3kdiJQikFC.34pltakapzDOONDkzvFeW4DP_yl5eBXAi9Zj_6xYzak"
+  width="800"
+  height="600"
+  frameborder="0"
+  loading="lazy"
+  sandbox="allow-scripts allow-same-origin allow-forms"
+  title="Jira Integration - Sequence"
+  allow="fullscreen"
+  style="border: 1px solid #e2e8f0; border-radius: 8px;"
+></iframe>
+
 ### Deployment Tracking
 
 Create GitHub deployments for visibility in GitHub's deployment dashboard. This works independently of the `environment:` key in workflow YAML.
@@ -1510,6 +1598,269 @@ Create GitHub deployments for visibility in GitHub's deployment dashboard. This 
 
 **Note:** This creates deployments via the GitHub Deployments API, which is separate from GitHub's native Environment Protection Rules. You can use both together or independently.
 
+<iframe
+  src="https://fanfa.dev/e/HXhZq6PJgUKCCvY4.jqmkyEBjK4DhbS2N67KgsVxmH64B_uFC1QW23NFwVp8"
+  width="800"
+  height="600"
+  frameborder="0"
+  loading="lazy"
+  sandbox="allow-scripts allow-same-origin allow-forms"
+  title="Deployment Tracking"
+  allow="fullscreen"
+  style="border: 1px solid #e2e8f0; border-radius: 8px;"
+></iframe>
+
+### Environment Deployment Approval
+
+Integrate IssueOps approval with GitHub's native Environment Protection Rules. This allows you to:
+
+- Use GitHub Environments for secrets and deployment tracking
+- Require approval through your IssueOps workflow
+- Automatically approve pending environment deployments when IssueOps approves
+
+#### Two Integration Flows
+
+<iframe
+  src="https://fanfa.dev/e/pdAEEOc9V9r29lpk.1dMEqzuF0-sUCLeRnbXNVMDTrV9zTT7nk6vSXFXwdlw"
+  width="800"
+  height="600"
+  frameborder="0"
+  loading="lazy"
+  sandbox="allow-scripts allow-same-origin allow-forms"
+  title="Environment Approval Overview"
+  allow="fullscreen"
+  style="border: 1px solid #e2e8f0; border-radius: 8px;"
+></iframe>
+
+| Flow | Use Case | Environment Config | Max Approval Time |
+|------|----------|-------------------|-------------------|
+| **A** | Compliance requires GitHub's Built-in reviewers | Has Required Reviewers | 30 days (GitHub limit) |
+| **B** | Flexible, long approvals | No Required Reviewers | Unlimited |
+
+#### Flow A: With Environment Required Reviewers
+
+Use this when you need GitHub's built-in Required Reviewers AND want IssueOps to trigger the approval automatically.
+
+**Limitations:**
+
+- Requires a PAT from a user who is a Required Reviewer (GITHUB_TOKEN won't work)
+- 30-day maximum wait time (GitHub limit)
+- GitHub Apps cannot be Required Reviewers
+
+<iframe
+  src="https://fanfa.dev/e/XxGcn5fTqbmbBzfr.VgKVjSqHZimvDGOuypzDynam_oJDVOvNa7qSosU52Kk"
+  width="800"
+  height="600"
+  frameborder="0"
+  loading="lazy"
+  sandbox="allow-scripts allow-same-origin allow-forms"
+  title="Flow A - Sequence"
+  allow="fullscreen"
+  style="border: 1px solid #e2e8f0; border-radius: 8px;"
+></iframe>
+
+**deploy.yml (Flow A):**
+
+```yaml
+name: Deploy with Environment Approval
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        required: true
+
+jobs:
+  request-approval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jamengual/enterprise-approval-engine@v1
+        with:
+          action: request
+          workflow: production-deploy
+          version: ${{ inputs.version }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          track_pending_run: true  # Store run_id for later approval
+
+  deploy:
+    needs: request-approval
+    runs-on: ubuntu-latest
+    environment: production  # Has Required Reviewers
+    steps:
+      - run: echo "Deploying ${{ inputs.version }}"
+```
+
+**handle-approval.yml (Flow A):**
+
+```yaml
+name: Handle Approval
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  process:
+    if: contains(github.event.issue.labels.*.name, 'approval-required')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jamengual/enterprise-approval-engine@v1
+        with:
+          action: process-comment
+          issue_number: ${{ github.event.issue.number }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          # Also approve the pending environment deployment
+          approve_environment_deployment: true
+          environment_approval_token: ${{ secrets.REVIEWER_PAT }}
+```
+
+**Required Setup for Flow A:**
+
+1. Add a user as Required Reviewer on the environment
+2. Create a PAT for that user with `repo` scope
+3. Store the PAT as `REVIEWER_PAT` secret
+4. Configure `approve_environment_deployment: true` and `environment_approval_token`
+
+#### Flow B: IssueOps Only (Recommended for Long Approvals)
+
+Use this for quarterly deployments or any approval cycle >30 days. IssueOps is the sole approval gate.
+
+<iframe
+  src="https://fanfa.dev/e/vh7E7ysJNJQBhlCV.DT5_K-UsK6hYWt5TcMiuOfhH7JjUWlJVezckSR48z1A"
+  width="800"
+  height="600"
+  frameborder="0"
+  loading="lazy"
+  sandbox="allow-scripts allow-same-origin allow-forms"
+  title="Flow B - Sequence"
+  allow="fullscreen"
+  style="border: 1px solid #e2e8f0; border-radius: 8px;"
+></iframe>
+
+**Environment Settings (Flow B):**
+
+```text
+Environment: production
+├── Required reviewers: NONE (empty)
+├── Wait timer: 0
+├── Deployment branches: All (or specific)
+└── Secrets: PROD_API_KEY, PROD_DB_URL, etc.
+```
+
+**request-deployment.yml (Flow B):**
+
+```yaml
+name: Request Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        required: true
+
+jobs:
+  request:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jamengual/enterprise-approval-engine@v1
+        with:
+          action: request
+          workflow: production-deploy
+          version: ${{ inputs.version }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+```
+
+**handle-approval.yml (Flow B):**
+
+```yaml
+name: Handle Approval
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  process:
+    if: contains(github.event.issue.labels.*.name, 'approval-required')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jamengual/enterprise-approval-engine@v1
+        id: process
+        with:
+          action: process-comment
+          issue_number: ${{ github.event.issue.number }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Trigger deployment after approval
+      - name: Trigger Deployment
+        if: steps.process.outputs.status == 'approved'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh workflow run deploy.yml \
+            -f version=${{ steps.process.outputs.tag }} \
+            -f approval_issue=${{ github.event.issue.number }}
+```
+
+**deploy.yml (Flow B):**
+
+```yaml
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        required: true
+      approval_issue:
+        required: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production  # For secrets only, no approval gate
+    steps:
+      - uses: actions/checkout@v4
+
+      # Optional: Verify approval status
+      - uses: jamengual/enterprise-approval-engine@v1
+        id: verify
+        with:
+          action: check
+          issue_number: ${{ inputs.approval_issue }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify Approval
+        if: steps.verify.outputs.status != 'approved'
+        run: |
+          echo "::error::Issue #${{ inputs.approval_issue }} is not approved!"
+          exit 1
+
+      - name: Deploy
+        run: echo "Deploying ${{ inputs.version }}"
+        env:
+          PROD_API_KEY: ${{ secrets.PROD_API_KEY }}
+```
+
+#### Environment Approval Inputs
+
+| Input | Description | Required | Default |
+|-------|-------------|----------|---------|
+| `track_pending_run` | Store run ID for later environment approval (Flow A) | No | `false` |
+| `approve_environment_deployment` | Also approve pending environment deployment | No | `false` |
+| `environment_approval_token` | PAT from a Required Reviewer | No | Uses main token |
+
+#### Environment Approval Outputs
+
+| Output | Description |
+|--------|-------------|
+| `pending_run_id` | Workflow run ID stored for environment approval |
+| `environment_deployment_approved` | Whether environment deployment was approved |
+
 ### External Config Repository
 
 Store approval configs in a shared repository for centralized policy management:
@@ -1537,6 +1888,18 @@ myorg/.github/
 ├── backend_approvals.yml    # Backend repos config
 └── approvals.yml            # Default for all repos
 ```
+
+<iframe
+  src="https://fanfa.dev/e/XZVLsQP6gWfcXk4I.zKDLeBr_N90DekrKMwNvSTfJCqpwYFUzsWL2gAtU48Q"
+  width="800"
+  height="600"
+  frameborder="0"
+  loading="lazy"
+  sandbox="allow-scripts allow-same-origin allow-forms"
+  title="External Config Resolution"
+  allow="fullscreen"
+  style="border: 1px solid #e2e8f0; border-radius: 8px;"
+></iframe>
 
 ### Blocking Approvals
 
@@ -1595,6 +1958,30 @@ jobs:
 ```
 
 **Note:** Blocking workflows keep the runner active, which consumes GitHub Actions minutes. For cost-sensitive scenarios, use the event-driven approach (separate `process-comment` workflow).
+
+<iframe
+  src="https://fanfa.dev/e/rzMV10OmuBEgsUBW.MGvZ50nRGqAGBymqubLfTYFdfH94Q6PdZw5ZIl8Z3rU"
+  width="800"
+  height="600"
+  frameborder="0"
+  loading="lazy"
+  sandbox="allow-scripts allow-same-origin allow-forms"
+  title="Blocking Approval - Flowchart"
+  allow="fullscreen"
+  style="border: 1px solid #e2e8f0; border-radius: 8px;"
+></iframe>
+
+<iframe
+  src="https://fanfa.dev/e/ZVacKACj9bBICaqj.XB1PDBL88iCaQoF48XnZzatPRcbLG-6pok3DhjoUxGA"
+  width="800"
+  height="600"
+  frameborder="0"
+  loading="lazy"
+  sandbox="allow-scripts allow-same-origin allow-forms"
+  title="Blocking Approval - Sequence"
+  allow="fullscreen"
+  style="border: 1px solid #e2e8f0; border-radius: 8px;"
+></iframe>
 
 ### Tag Deletion on Issue Close
 

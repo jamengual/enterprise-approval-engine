@@ -100,6 +100,21 @@ inputs:
     description: 'URL to the deployed environment'
     required: false
 
+  # Environment Deployment Approval (Flow A)
+  track_pending_run:
+    description: 'Store the current workflow run ID in issue metadata for later environment approval'
+    required: false
+    default: 'false'
+
+  approve_environment_deployment:
+    description: 'Also approve pending GitHub environment deployment when IssueOps approves'
+    required: false
+    default: 'false'
+
+  environment_approval_token:
+    description: 'PAT for approving environment deployment (must be from a Required Reviewer). If not provided, uses the main token, but note that GITHUB_TOKEN cannot approve Required Reviewer environments.'
+    required: false
+
   # Release Notes
   include_jira_issues:
     description: 'Include Jira issues in approval request body'
@@ -171,6 +186,13 @@ outputs:
 
   commits_count:
     description: 'Number of commits in this release'
+
+  # Environment deployment approval outputs
+  environment_deployment_approved:
+    description: 'Whether environment deployment was approved (true/false)'
+
+  pending_run_id:
+    description: 'Workflow run ID stored for environment deployment approval'
 
 runs:
   using: 'docker'

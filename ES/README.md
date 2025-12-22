@@ -53,6 +53,55 @@ GitHub Action de nivel empresarial para flujos de trabajo de aprobación basados
 - [Validación de Esquema](#validación-de-esquema)
 - [Servidor Empresarial de GitHub](#servidor-empresarial-de-github)
 
+## Cómo Funciona
+
+```mermaid
+flowchart LR
+    subgraph "1. Solicitar"
+        A[Desarrollador] -->|Dispara| B[request-approval.yml]
+        B -->|Crea| C[Issue de Aprobación]
+    end
+
+    subgraph "2. Aprobar"
+        C -->|Aprobadores comentan| D[handle-approval.yml]
+        D -->|Valida| E{¿Política cumplida?}
+    end
+
+    subgraph "3. Desplegar"
+        E -->|Sí| F[Crear Etiqueta]
+        F --> G[Disparar Despliegue]
+        E -->|No| H[Esperar más aprobaciones]
+        H --> D
+    end
+```
+
+```mermaid
+sequenceDiagram
+    participant Dev as Desarrollador
+    participant GHA as GitHub Actions
+    participant Issue as Issue de Aprobación
+    participant Approver as Aprobador(es)
+    participant Repo as Repositorio
+
+    Dev->>GHA: Disparar flujo request-approval
+    GHA->>Issue: Crear issue de aprobación
+    GHA-->>Dev: Devolver URL del issue
+
+    Note over Issue: Esperando aprobaciones...
+
+    Approver->>Issue: Comentar "approve"
+    Issue->>GHA: Disparar flujo handle-approval
+    GHA->>GHA: Validar aprobador y verificar política
+
+    alt Política satisfecha
+        GHA->>Repo: Crear etiqueta git
+        GHA->>Issue: Cerrar issue
+        GHA->>GHA: Disparar despliegue
+    else Más aprobaciones necesarias
+        GHA->>Issue: Actualizar comentario de estado
+    end
+```
+
 ## Inicio Rápido
 
 ### 1. Crear Configuración
@@ -379,6 +428,49 @@ policies:
 **Precedencia de operadores:** AND se une más fuerte que OR (lógica booleana estándar).
 
 La expresión `A and B or C and D` se evalúa como `(A AND B) OR (C AND D)`.
+
+#### Visualización de Lógica de Políticas
+
+```mermaid
+flowchart TB
+    subgraph "Lógica AND (predeterminada)"
+        A1[Equipo Seguridad<br/>min: 2] --> |AND| A2[Equipo Plataforma<br/>min: 1]
+        A2 --> |AND| A3[Tech Lead]
+        A3 --> A4((Todos deben<br/>satisfacerse))
+    end
+
+    subgraph "Lógica OR"
+        B1[Equipo Seguridad<br/>require_all] --> B4
+        B2[Equipo Plataforma<br/>min: 2] --> B4
+        B3[Ejecutivo<br/>cualquier uno] --> B4
+        B4((Cualquier camino<br/>satisface))
+    end
+
+    subgraph "Mixto: (A AND B) OR C"
+        C1[Seguridad<br/>min: 2] --> |AND| C2[Plataforma<br/>min: 2]
+        C2 --> |OR| C4
+        C3[Alice] --> C4((Aprobado))
+    end
+```
+
+```mermaid
+flowchart LR
+    subgraph "Lógica OR a Nivel de Flujo de Trabajo"
+        direction TB
+        REQ[require:]
+        P1[policy: dev-team<br/>2 de 3 devs]
+        P2[policy: platform-team<br/>todos los miembros]
+        P3[policy: exec-approval<br/>cualquier ejecutivo]
+
+        REQ --> P1
+        REQ --> P2
+        REQ --> P3
+
+        P1 --> |OR| RESULT((Aprobado))
+        P2 --> |OR| RESULT
+        P3 --> |OR| RESULT
+    end
+```
 
 ### Flujos de Trabajo
 
@@ -821,6 +913,32 @@ jobs:
 **Permisos requeridos de la aplicación de GitHub:**
 
 - `Organization > Members: Read` - Para listar miembros del equipo
+
+```mermaid
+sequenceDiagram
+    participant User as Aprobador
+    participant Issue as Issue de Aprobación
+    participant Action as Motor de Aprobación
+    participant GitHubAPI as API de GitHub
+    participant Org as Org de GitHub
+
+    User->>Issue: Comentar "approve"
+    Issue->>Action: Disparar handle-approval.yml
+
+    Action->>Action: Verificar si usuario está en lista de aprobadores
+
+    alt Usuario es aprobador individual
+        Action->>Action: Coincidencia directa ✓
+    else Usuario en formato team:slug
+        Action->>GitHubAPI: Obtener miembros del equipo (token de App)
+        GitHubAPI->>Org: Listar team:platform-engineers
+        Org-->>GitHubAPI: [alice, bob, charlie]
+        GitHubAPI-->>Action: Miembros del equipo
+        Action->>Action: Verificar si usuario está en equipo ✓
+    end
+
+    Action->>Issue: Actualizar estado de aprobación
+```
 
 ### Tuberías de Despliegue Progresivo
 
@@ -1480,6 +1598,45 @@ Esto muestra información detallada sobre los problemas:
     # Salida: [{"key":"PROJ-123","summary":"Corregir error de inicio de sesión",...}]
 ```
 
+```mermaid
+flowchart LR
+    subgraph "Flujo de Integración con Jira"
+        A[acción request] --> B[Escanear commits<br/>y ramas]
+        B --> C{¿Claves de issues encontradas?<br/>ej., PROJ-123}
+
+        C -->|Sí| D{¿Credenciales<br/>de API Jira?}
+        C -->|No| E[Sin sección Jira]
+
+        D -->|Solo enlaces| F[Mostrar como enlaces]
+        D -->|Modo completo| G[Obtener detalles de issues]
+
+        G --> H[Mostrar tabla con<br/>resumen, estado, tipo]
+        G --> I[Actualizar Fix Version]
+    end
+```
+
+```mermaid
+sequenceDiagram
+    participant GHA as GitHub Actions
+    participant Commits as Commits Git
+    participant Jira as API de Jira
+    participant Issue as Issue de Aprobación
+
+    GHA->>Commits: Obtener mensajes de commit
+    Commits-->>GHA: "Fix login [PROJ-123]", "Add feature [PROJ-456]"
+
+    GHA->>GHA: Extraer claves de issues con regex
+
+    alt Modo Completo (con credenciales)
+        GHA->>Jira: GET /rest/api/3/issue/PROJ-123
+        Jira-->>GHA: {resumen, estado, tipo}
+        GHA->>Jira: PUT /rest/api/3/issue (actualizar Fix Version)
+        GHA->>Issue: Crear tabla con detalles
+    else Modo Solo Enlaces
+        GHA->>Issue: Crear lista de enlaces
+    end
+```
+
 ### Seguimiento de Despliegue
 
 Crea despliegues de GitHub para visibilidad en el panel de despliegues de GitHub. Esto funciona independientemente de la clave `environment:` en el YAML del flujo de trabajo.
@@ -1513,6 +1670,31 @@ Crea despliegues de GitHub para visibilidad en el panel de despliegues de GitHub
 
 **Nota:** Esto crea despliegues a través de la API de Despliegues de GitHub, que es independiente de las Reglas de Protección de Entorno nativas de GitHub. Puedes usar ambas juntas o por separado.
 
+```mermaid
+flowchart LR
+    subgraph "Flujo de API de Despliegues de GitHub"
+        A[acción request<br/>create_deployment: true] --> B[Crear Despliegue<br/>estado: pending]
+        B --> C[Issue de Aprobación Creado]
+        C --> D{¿Aprobado?}
+
+        D -->|Sí| E[process-comment]
+        E --> F[Actualizar Despliegue<br/>estado: success]
+
+        D -->|Denegado| G[Actualizar Despliegue<br/>estado: failure]
+    end
+
+    subgraph "UI de GitHub"
+        H[Página del Repositorio]
+        I[Pestaña Despliegues]
+        J[Insignias de Entorno]
+
+        F --> H
+        F --> I
+        F --> J
+        G --> I
+    end
+```
+
 ### Repositorio de Configuración Externa
 
 Almacena configuraciones de aprobación en un repositorio compartido para una gestión centralizada de políticas:
@@ -1539,6 +1721,29 @@ myorg/.github/
 ├── myapp_approvals.yml      # Configuración específica de la aplicación
 ├── backend_approvals.yml    # Configuración de repositorios de backend
 └── approvals.yml            # Predeterminado para todos los repositorios
+```
+
+```mermaid
+flowchart TB
+    subgraph "Resolución de Configuración Externa"
+        A[Acción de Aprobación] --> B{¿config_repo establecido?}
+
+        B -->|No| C[Cargar .github/approvals.yml<br/>del repositorio actual]
+
+        B -->|Sí| D[Verificar repositorio externo]
+        D --> E{¿repo-name_approvals.yml<br/>existe?}
+        E -->|Sí| F[Cargar configuración específica de app]
+        E -->|No| G{¿approvals.yml existe?}
+        G -->|Sí| H[Cargar configuración compartida]
+        G -->|No| C
+    end
+
+    subgraph "Ejemplo: repositorio myapp"
+        direction LR
+        I[myorg/.github/myapp_approvals.yml] --> |Prioridad 1| J((Config))
+        K[myorg/.github/approvals.yml] --> |Prioridad 2| J
+        L[myapp/.github/approvals.yml] --> |Prioridad 3| J
+    end
 ```
 
 ### Aprobaciones Bloqueantes
@@ -1598,6 +1803,44 @@ jobs:
 ```
 
 **Nota:** Los flujos de trabajo bloqueantes mantienen el runner activo, lo que consume minutos de GitHub Actions. Para escenarios sensibles al costo, usa el enfoque basado en eventos (flujo de trabajo `process-comment` separado).
+
+```mermaid
+flowchart LR
+    subgraph "Patrón de Aprobación Bloqueante"
+        A[job request-approval] --> B[Crear Issue]
+        B --> C[job wait-for-approval]
+        C --> D{Sondear con<br/>wait: true}
+
+        D -->|Pendiente| E[Dormir 30s]
+        E --> D
+
+        D -->|Aprobado| F[job deploy]
+        D -->|Denegado| G[Flujo falla]
+        D -->|Timeout| G
+    end
+```
+
+```mermaid
+sequenceDiagram
+    participant Workflow as Flujo de GitHub
+    participant Issue as Issue de Aprobación
+    participant Approver as Aprobador
+
+    Workflow->>Issue: Crear issue de aprobación
+    Workflow->>Workflow: Iniciar sondeo (wait: true)
+
+    loop Cada 30 segundos
+        Workflow->>Issue: Verificar estado
+        Issue-->>Workflow: pending
+    end
+
+    Approver->>Issue: Comentar "approve"
+
+    Workflow->>Issue: Verificar estado
+    Issue-->>Workflow: approved
+
+    Workflow->>Workflow: Proceder al job de deploy
+```
 
 ### Eliminación de Etiquetas al Cerrar Problemas
 
