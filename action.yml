@@ -112,7 +112,7 @@ inputs:
     default: 'false'
 
   environment_approval_token:
-    description: 'PAT for approving environment deployment (must be from a Required Reviewer). If not provided, uses the main token.'
+    description: 'PAT for approving environment deployment (must be from a Required Reviewer). If not provided, uses the main token, but note that GITHUB_TOKEN cannot approve Required Reviewer environments.'
     required: false
 
   # Release Notes

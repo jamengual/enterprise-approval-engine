@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/google/go-github/v57/github"
 )
@@ -42,7 +43,8 @@ type WorkflowRun struct {
 }
 
 // GetPendingDeployments returns deployments waiting for approval for a workflow run.
-// Note: This uses a direct API call since go-github v57 doesn't have this method.
+// Note: go-github v57 does not provide a dedicated typed method for this endpoint,
+// so we use the generic client.NewRequest/client.Do helpers.
 func (c *Client) GetPendingDeployments(ctx context.Context, runID int64) ([]PendingDeployment, error) {
 	url := fmt.Sprintf("repos/%s/%s/actions/runs/%d/pending_deployments", c.owner, c.repo, runID)
 
@@ -191,7 +193,7 @@ func (c *Client) FindWaitingRunByIssue(ctx context.Context, issueNumber int) (*W
 	issueStr := fmt.Sprintf("#%d", issueNumber)
 	for _, run := range runs {
 		// Check if run name contains the issue number
-		if contains(run.Name, issueStr) {
+		if strings.Contains(run.Name, issueStr) {
 			return &run, nil
 		}
 	}
@@ -227,17 +229,3 @@ func (c *Client) IsRunWaiting(ctx context.Context, runID int64) (bool, error) {
 	return run.Status == "waiting", nil
 }
 
-// contains checks if a string contains a substring (case-insensitive).
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
-		(len(s) > 0 && len(substr) > 0 && containsLower(s, substr)))
-}
-
-func containsLower(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}

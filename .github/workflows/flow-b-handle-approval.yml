@@ -95,11 +95,21 @@ jobs:
               issue_number: context.issue.number
             });
 
-            // Determine environment from labels
+            // Determine environment from labels (require explicit label)
             const labels = issue.data.labels.map(l => l.name);
-            let environment = 'production'; // default
-            if (labels.includes('staging')) environment = 'staging';
-            if (labels.includes('production')) environment = 'production';
+            const hasStaging = labels.includes('staging');
+            const hasProduction = labels.includes('production');
+
+            if (!hasStaging && !hasProduction) {
+              core.setFailed('No environment label found. Add "staging" or "production" label to the issue.');
+              return;
+            }
+            if (hasStaging && hasProduction) {
+              core.setFailed('Multiple environment labels found. Use only one of "staging" or "production".');
+              return;
+            }
+
+            const environment = hasStaging ? 'staging' : 'production';
 
             // Trigger the deploy workflow
             await github.rest.actions.createWorkflowDispatch({

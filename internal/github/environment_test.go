@@ -4,67 +4,6 @@ import (
 	"testing"
 )
 
-func TestContains(t *testing.T) {
-	tests := []struct {
-		name     string
-		s        string
-		substr   string
-		expected bool
-	}{
-		{
-			name:     "exact match",
-			s:        "#123",
-			substr:   "#123",
-			expected: true,
-		},
-		{
-			name:     "contains in middle",
-			s:        "Deploy #123 to production",
-			substr:   "#123",
-			expected: true,
-		},
-		{
-			name:     "contains at start",
-			s:        "#123 deployment",
-			substr:   "#123",
-			expected: true,
-		},
-		{
-			name:     "contains at end",
-			s:        "deployment #123",
-			substr:   "#123",
-			expected: true,
-		},
-		{
-			name:     "not found",
-			s:        "Deploy #456 to production",
-			substr:   "#123",
-			expected: false,
-		},
-		{
-			name:     "empty substring",
-			s:        "any string",
-			substr:   "",
-			expected: true,
-		},
-		{
-			name:     "empty string",
-			s:        "",
-			substr:   "#123",
-			expected: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := contains(tt.s, tt.substr)
-			if result != tt.expected {
-				t.Errorf("contains(%q, %q) = %v, want %v", tt.s, tt.substr, result, tt.expected)
-			}
-		})
-	}
-}
-
 func TestPendingDeployment(t *testing.T) {
 	// Test PendingDeployment struct
 	pd := PendingDeployment{
