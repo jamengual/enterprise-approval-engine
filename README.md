@@ -27,6 +27,8 @@ Enterprise-grade GitHub Action for policy-based approval workflows with per-grou
 - **GitHub Enterprise Server**: Full support for GHES environments
 - **No External Dependencies**: Pure GitHub Actions, no external services required
 
+📋 **See it in action:** [Example approval issue](https://github.com/jamengual/enterprise-approval-engine/issues/7)
+
 ## Table of Contents
 
 - [Quick Start](#quick-start)
