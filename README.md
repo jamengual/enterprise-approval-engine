@@ -60,52 +60,29 @@ Enterprise-grade GitHub Action for policy-based approval workflows with per-grou
 
 ## How It Works
 
-```mermaid
-flowchart LR
-    subgraph "1. Request"
-        A[Developer] -->|Triggers| B[request-approval.yml]
-        B -->|Creates| C[Approval Issue]
-    end
+<iframe
+  src="https://fanfa.dev/e/FLGAk9llWZSbrRxw.HdhOR95M7FPCzsU_WmhB6JyAXMO0n9T6Jnu1tfF-cks"
+  width="800"
+  height="600"
+  frameborder="0"
+  loading="lazy"
+  sandbox="allow-scripts allow-same-origin allow-forms"
+  title="How It Works - Flowchart"
+  allow="fullscreen"
+  style="border: 1px solid #e2e8f0; border-radius: 8px;"
+></iframe>
 
-    subgraph "2. Approve"
-        C -->|Approvers comment| D[handle-approval.yml]
-        D -->|Validates| E{Policy Met?}
-    end
-
-    subgraph "3. Deploy"
-        E -->|Yes| F[Create Tag]
-        F --> G[Trigger Deploy]
-        E -->|No| H[Wait for more approvals]
-        H --> D
-    end
-```
-
-```mermaid
-sequenceDiagram
-    participant Dev as Developer
-    participant GHA as GitHub Actions
-    participant Issue as Approval Issue
-    participant Approver as Approver(s)
-    participant Repo as Repository
-
-    Dev->>GHA: Trigger request-approval workflow
-    GHA->>Issue: Create approval issue
-    GHA-->>Dev: Return issue URL
-
-    Note over Issue: Waiting for approvals...
-
-    Approver->>Issue: Comment "approve"
-    Issue->>GHA: Trigger handle-approval workflow
-    GHA->>GHA: Validate approver & check policy
-
-    alt Policy satisfied
-        GHA->>Repo: Create git tag
-        GHA->>Issue: Close issue
-        GHA->>GHA: Trigger deployment
-    else More approvals needed
-        GHA->>Issue: Update status comment
-    end
-```
+<iframe
+  src="https://fanfa.dev/e/mDEkHrPrsvxmjJNz.kmEvY0xn_ygh2EPB-V30V1gkqH2zeaRTTtLavAG8jqQ"
+  width="800"
+  height="600"
+  frameborder="0"
+  loading="lazy"
+  sandbox="allow-scripts allow-same-origin allow-forms"
+  title="How It Works - Sequence"
+  allow="fullscreen"
+  style="border: 1px solid #e2e8f0; border-radius: 8px;"
+></iframe>
 
 ## Quick Start
 
@@ -436,46 +413,29 @@ The expression `A and B or C and D` is evaluated as `(A AND B) OR (C AND D)`.
 
 #### Policy Logic Visualization
 
-```mermaid
-flowchart TB
-    subgraph "AND Logic (default)"
-        A1[Security Team<br/>min: 2] --> |AND| A2[Platform Team<br/>min: 1]
-        A2 --> |AND| A3[Tech Lead]
-        A3 --> A4((All must<br/>be satisfied))
-    end
+<iframe
+  src="https://fanfa.dev/e/MJ50YiB5fVTYYJ8Y.6TFCbwhnFb0ajDwOIkKd0wjYXJVFxMcP1IYGxxsK1GU"
+  width="800"
+  height="600"
+  frameborder="0"
+  loading="lazy"
+  sandbox="allow-scripts allow-same-origin allow-forms"
+  title="Policy Logic - AND/OR"
+  allow="fullscreen"
+  style="border: 1px solid #e2e8f0; border-radius: 8px;"
+></iframe>
 
-    subgraph "OR Logic"
-        B1[Security Team<br/>require_all] --> B4
-        B2[Platform Team<br/>min: 2] --> B4
-        B3[Executive<br/>any one] --> B4
-        B4((Any path<br/>satisfies))
-    end
-
-    subgraph "Mixed: (A AND B) OR C"
-        C1[Security<br/>min: 2] --> |AND| C2[Platform<br/>min: 2]
-        C2 --> |OR| C4
-        C3[Alice] --> C4((Approved))
-    end
-```
-
-```mermaid
-flowchart LR
-    subgraph "Workflow-Level OR Logic"
-        direction TB
-        REQ[require:]
-        P1[policy: dev-team<br/>2 of 3 devs]
-        P2[policy: platform-team<br/>all members]
-        P3[policy: exec-approval<br/>any executive]
-
-        REQ --> P1
-        REQ --> P2
-        REQ --> P3
-
-        P1 --> |OR| RESULT((Approved))
-        P2 --> |OR| RESULT
-        P3 --> |OR| RESULT
-    end
-```
+<iframe
+  src="https://fanfa.dev/e/FJx0rldGQOS5MaiJ.YoFDj8z5m-n7j1C_lqz05D8nhPBPmXaEm1plKeRPoHY"
+  width="800"
+  height="600"
+  frameborder="0"
+  loading="lazy"
+  sandbox="allow-scripts allow-same-origin allow-forms"
+  title="Workflow-Level OR Logic"
+  allow="fullscreen"
+  style="border: 1px solid #e2e8f0; border-radius: 8px;"
+></iframe>
 
 ### Workflows
 
@@ -915,31 +875,17 @@ jobs:
 
 - `Organization > Members: Read` - To list team members
 
-```mermaid
-sequenceDiagram
-    participant User as Approver
-    participant Issue as Approval Issue
-    participant Action as Approval Engine
-    participant GitHubAPI as GitHub API
-    participant Org as GitHub Org
-
-    User->>Issue: Comment "approve"
-    Issue->>Action: Trigger handle-approval.yml
-
-    Action->>Action: Check if user in approvers list
-
-    alt User is individual approver
-        Action->>Action: Direct match ✓
-    else User in team:slug format
-        Action->>GitHubAPI: Get team members (App token)
-        GitHubAPI->>Org: List team:platform-engineers
-        Org-->>GitHubAPI: [alice, bob, charlie]
-        GitHubAPI-->>Action: Team members
-        Action->>Action: Check if user in team ✓
-    end
-
-    Action->>Issue: Update approval status
-```
+<iframe
+  src="https://fanfa.dev/e/aGhj4Z88OAi7GTBo.aH6JNfN7g5BT4PxNCSIhsdBVlvHkrWdLXEpNX-iMrU0"
+  width="800"
+  height="600"
+  frameborder="0"
+  loading="lazy"
+  sandbox="allow-scripts allow-same-origin allow-forms"
+  title="Team Support - Sequence"
+  allow="fullscreen"
+  style="border: 1px solid #e2e8f0; border-radius: 8px;"
+></iframe>
 
 ### Progressive Deployment Pipelines
 
@@ -1595,44 +1541,29 @@ This displays rich issue information:
     # Output: [{"key":"PROJ-123","summary":"Fix login bug",...}]
 ```
 
-```mermaid
-flowchart LR
-    subgraph "Jira Integration Flow"
-        A[request action] --> B[Scan commits<br/>& branches]
-        B --> C{Found issue keys?<br/>e.g., PROJ-123}
+<iframe
+  src="https://fanfa.dev/e/eMRlOKHVI9Wkynkt.ySSPB0zkc08Bpwco_xr00sAzeD62ZzwIxD-LGbh-Vj4"
+  width="800"
+  height="600"
+  frameborder="0"
+  loading="lazy"
+  sandbox="allow-scripts allow-same-origin allow-forms"
+  title="Jira Integration - Flowchart"
+  allow="fullscreen"
+  style="border: 1px solid #e2e8f0; border-radius: 8px;"
+></iframe>
 
-        C -->|Yes| D{Jira API<br/>credentials?}
-        C -->|No| E[No Jira section]
-
-        D -->|Links-only| F[Display as links]
-        D -->|Full mode| G[Fetch issue details]
-
-        G --> H[Display table with<br/>summary, status, type]
-        G --> I[Update Fix Version]
-    end
-```
-
-```mermaid
-sequenceDiagram
-    participant GHA as GitHub Actions
-    participant Commits as Git Commits
-    participant Jira as Jira API
-    participant Issue as Approval Issue
-
-    GHA->>Commits: Get commit messages
-    Commits-->>GHA: "Fix login [PROJ-123]", "Add feature [PROJ-456]"
-
-    GHA->>GHA: Extract issue keys with regex
-
-    alt Full Mode (with credentials)
-        GHA->>Jira: GET /rest/api/3/issue/PROJ-123
-        Jira-->>GHA: {summary, status, type}
-        GHA->>Jira: PUT /rest/api/3/issue (update Fix Version)
-        GHA->>Issue: Create table with details
-    else Links-Only Mode
-        GHA->>Issue: Create links list
-    end
-```
+<iframe
+  src="https://fanfa.dev/e/yTaJkN3kdiJQikFC.34pltakapzDOONDkzvFeW4DP_yl5eBXAi9Zj_6xYzak"
+  width="800"
+  height="600"
+  frameborder="0"
+  loading="lazy"
+  sandbox="allow-scripts allow-same-origin allow-forms"
+  title="Jira Integration - Sequence"
+  allow="fullscreen"
+  style="border: 1px solid #e2e8f0; border-radius: 8px;"
+></iframe>
 
 ### Deployment Tracking
 
@@ -1667,30 +1598,17 @@ Create GitHub deployments for visibility in GitHub's deployment dashboard. This 
 
 **Note:** This creates deployments via the GitHub Deployments API, which is separate from GitHub's native Environment Protection Rules. You can use both together or independently.
 
-```mermaid
-flowchart LR
-    subgraph "GitHub Deployments API Flow"
-        A[request action<br/>create_deployment: true] --> B[Create Deployment<br/>status: pending]
-        B --> C[Approval Issue Created]
-        C --> D{Approved?}
-
-        D -->|Yes| E[process-comment]
-        E --> F[Update Deployment<br/>status: success]
-
-        D -->|Denied| G[Update Deployment<br/>status: failure]
-    end
-
-    subgraph "GitHub UI"
-        H[Repository Page]
-        I[Deployments Tab]
-        J[Environment Badges]
-
-        F --> H
-        F --> I
-        F --> J
-        G --> I
-    end
-```
+<iframe
+  src="https://fanfa.dev/e/HXhZq6PJgUKCCvY4.jqmkyEBjK4DhbS2N67KgsVxmH64B_uFC1QW23NFwVp8"
+  width="800"
+  height="600"
+  frameborder="0"
+  loading="lazy"
+  sandbox="allow-scripts allow-same-origin allow-forms"
+  title="Deployment Tracking"
+  allow="fullscreen"
+  style="border: 1px solid #e2e8f0; border-radius: 8px;"
+></iframe>
 
 ### Environment Deployment Approval
 
@@ -1702,28 +1620,17 @@ Integrate IssueOps approval with GitHub's native Environment Protection Rules. T
 
 #### Two Integration Flows
 
-```mermaid
-flowchart TB
-    subgraph "Flow A: With Environment Required Reviewers"
-        A1[Workflow starts] --> A2[Job with environment: prod]
-        A2 --> A3[Job WAITING for approval]
-        A3 -.->|Meanwhile| A4[User approves IssueOps issue]
-        A4 --> A5[process-comment runs]
-        A5 --> A6[Calls GitHub API to approve environment]
-        A6 --> A7[Job proceeds with secrets]
-    end
-
-    subgraph "Flow B: IssueOps Only - No Required Reviewers"
-        B1[Request approval issue] --> B2[Wait for approval]
-        B2 -.->|Days/weeks later| B3[User approves issue]
-        B3 --> B4[Trigger deploy workflow]
-        B4 --> B5[environment: prod for secrets only]
-        B5 --> B6[Deploy immediately]
-    end
-
-    style A6 fill:#28a745,stroke:#1e7e34
-    style B6 fill:#28a745,stroke:#1e7e34
-```
+<iframe
+  src="https://fanfa.dev/e/pdAEEOc9V9r29lpk.1dMEqzuF0-sUCLeRnbXNVMDTrV9zTT7nk6vSXFXwdlw"
+  width="800"
+  height="600"
+  frameborder="0"
+  loading="lazy"
+  sandbox="allow-scripts allow-same-origin allow-forms"
+  title="Environment Approval Overview"
+  allow="fullscreen"
+  style="border: 1px solid #e2e8f0; border-radius: 8px;"
+></iframe>
 
 | Flow | Use Case | Environment Config | Max Approval Time |
 |------|----------|-------------------|-------------------|
@@ -1740,30 +1647,17 @@ Use this when you need GitHub's built-in Required Reviewers AND want IssueOps to
 - 30-day maximum wait time (GitHub limit)
 - GitHub Apps cannot be Required Reviewers
 
-```mermaid
-sequenceDiagram
-    participant User
-    participant DeployWorkflow as deploy.yml
-    participant GitHubEnv as GitHub Environment
-    participant ApprovalIssue as Approval Issue
-    participant HandleWorkflow as handle-approval.yml
-    participant GitHubAPI as GitHub API
-
-    User->>DeployWorkflow: Trigger deployment
-    DeployWorkflow->>ApprovalIssue: Create issue (track_pending_run: true)
-    Note over ApprovalIssue: Stores run_id in issue metadata
-    DeployWorkflow->>GitHubEnv: Job with environment: production
-    GitHubEnv-->>DeployWorkflow: WAITING for approval
-
-    Note over ApprovalIssue: Time passes...
-
-    User->>ApprovalIssue: Comment "approve"
-    ApprovalIssue->>HandleWorkflow: Trigger on issue_comment
-    HandleWorkflow->>HandleWorkflow: Process approval (IssueOps)
-    HandleWorkflow->>GitHubAPI: POST /pending_deployments (approve)
-    GitHubAPI-->>GitHubEnv: Approval granted
-    GitHubEnv-->>DeployWorkflow: Job proceeds with secrets
-```
+<iframe
+  src="https://fanfa.dev/e/XxGcn5fTqbmbBzfr.VgKVjSqHZimvDGOuypzDynam_oJDVOvNa7qSosU52Kk"
+  width="800"
+  height="600"
+  frameborder="0"
+  loading="lazy"
+  sandbox="allow-scripts allow-same-origin allow-forms"
+  title="Flow A - Sequence"
+  allow="fullscreen"
+  style="border: 1px solid #e2e8f0; border-radius: 8px;"
+></iframe>
 
 **deploy.yml (Flow A):**
 
@@ -1833,29 +1727,17 @@ jobs:
 
 Use this for quarterly deployments or any approval cycle >30 days. IssueOps is the sole approval gate.
 
-```mermaid
-sequenceDiagram
-    participant User
-    participant RequestWorkflow as request-deployment.yml
-    participant ApprovalIssue as Approval Issue
-    participant HandleWorkflow as handle-approval.yml
-    participant DeployWorkflow as deploy.yml
-    participant GitHubEnv as GitHub Environment
-
-    User->>RequestWorkflow: Request deployment
-    RequestWorkflow->>ApprovalIssue: Create approval issue
-
-    Note over ApprovalIssue: Days/weeks/months pass...
-
-    User->>ApprovalIssue: Comment "approve"
-    ApprovalIssue->>HandleWorkflow: Trigger on issue_comment
-    HandleWorkflow->>HandleWorkflow: Process approval
-    HandleWorkflow->>DeployWorkflow: Trigger via workflow_dispatch
-    DeployWorkflow->>GitHubEnv: environment: production
-    Note over GitHubEnv: No Required Reviewers = no waiting
-    GitHubEnv-->>DeployWorkflow: Secrets available immediately
-    DeployWorkflow->>DeployWorkflow: Deploy
-```
+<iframe
+  src="https://fanfa.dev/e/vh7E7ysJNJQBhlCV.DT5_K-UsK6hYWt5TcMiuOfhH7JjUWlJVezckSR48z1A"
+  width="800"
+  height="600"
+  frameborder="0"
+  loading="lazy"
+  sandbox="allow-scripts allow-same-origin allow-forms"
+  title="Flow B - Sequence"
+  allow="fullscreen"
+  style="border: 1px solid #e2e8f0; border-radius: 8px;"
+></iframe>
 
 **Environment Settings (Flow B):**
 
@@ -2007,28 +1889,17 @@ myorg/.github/
 └── approvals.yml            # Default for all repos
 ```
 
-```mermaid
-flowchart TB
-    subgraph "External Config Resolution"
-        A[Approval Action] --> B{config_repo set?}
-
-        B -->|No| C[Load .github/approvals.yml<br/>from current repo]
-
-        B -->|Yes| D[Check external repo]
-        D --> E{repo-name_approvals.yml<br/>exists?}
-        E -->|Yes| F[Load app-specific config]
-        E -->|No| G{approvals.yml exists?}
-        G -->|Yes| H[Load shared config]
-        G -->|No| C
-    end
-
-    subgraph "Example: myapp repo"
-        direction LR
-        I[myorg/.github/myapp_approvals.yml] --> |Priority 1| J((Config))
-        K[myorg/.github/approvals.yml] --> |Priority 2| J
-        L[myapp/.github/approvals.yml] --> |Priority 3| J
-    end
-```
+<iframe
+  src="https://fanfa.dev/e/XZVLsQP6gWfcXk4I.zKDLeBr_N90DekrKMwNvSTfJCqpwYFUzsWL2gAtU48Q"
+  width="800"
+  height="600"
+  frameborder="0"
+  loading="lazy"
+  sandbox="allow-scripts allow-same-origin allow-forms"
+  title="External Config Resolution"
+  allow="fullscreen"
+  style="border: 1px solid #e2e8f0; border-radius: 8px;"
+></iframe>
 
 ### Blocking Approvals
 
@@ -2088,43 +1959,29 @@ jobs:
 
 **Note:** Blocking workflows keep the runner active, which consumes GitHub Actions minutes. For cost-sensitive scenarios, use the event-driven approach (separate `process-comment` workflow).
 
-```mermaid
-flowchart LR
-    subgraph "Blocking Approval Pattern"
-        A[request-approval job] --> B[Create Issue]
-        B --> C[wait-for-approval job]
-        C --> D{Poll with<br/>wait: true}
+<iframe
+  src="https://fanfa.dev/e/rzMV10OmuBEgsUBW.MGvZ50nRGqAGBymqubLfTYFdfH94Q6PdZw5ZIl8Z3rU"
+  width="800"
+  height="600"
+  frameborder="0"
+  loading="lazy"
+  sandbox="allow-scripts allow-same-origin allow-forms"
+  title="Blocking Approval - Flowchart"
+  allow="fullscreen"
+  style="border: 1px solid #e2e8f0; border-radius: 8px;"
+></iframe>
 
-        D -->|Pending| E[Sleep 30s]
-        E --> D
-
-        D -->|Approved| F[deploy job]
-        D -->|Denied| G[Workflow fails]
-        D -->|Timeout| G
-    end
-```
-
-```mermaid
-sequenceDiagram
-    participant Workflow as GitHub Workflow
-    participant Issue as Approval Issue
-    participant Approver as Approver
-
-    Workflow->>Issue: Create approval issue
-    Workflow->>Workflow: Start polling (wait: true)
-
-    loop Every 30 seconds
-        Workflow->>Issue: Check status
-        Issue-->>Workflow: pending
-    end
-
-    Approver->>Issue: Comment "approve"
-
-    Workflow->>Issue: Check status
-    Issue-->>Workflow: approved
-
-    Workflow->>Workflow: Proceed to deploy job
-```
+<iframe
+  src="https://fanfa.dev/e/ZVacKACj9bBICaqj.XB1PDBL88iCaQoF48XnZzatPRcbLG-6pok3DhjoUxGA"
+  width="800"
+  height="600"
+  frameborder="0"
+  loading="lazy"
+  sandbox="allow-scripts allow-same-origin allow-forms"
+  title="Blocking Approval - Sequence"
+  allow="fullscreen"
+  style="border: 1px solid #e2e8f0; border-radius: 8px;"
+></iframe>
 
 ### Tag Deletion on Issue Close
 
