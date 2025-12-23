@@ -90,17 +90,23 @@ policies:
 
 ### Verify comment contains approval keyword
 
-Valid approval keywords: `approve`, `approved`, `lgtm`, `yes`, `/approve`
+**Approval keywords:** `approve`, `approved`, `lgtm`, `yes`, `/approve`
 
-Valid denial keywords: `deny`, `denied`, `reject`, `rejected`, `no`, `/deny`
+**Denial keywords:** `deny`, `denied`, `reject`, `rejected`, `no`, `/deny`
 
-### Ensure it's not a PR comment
+### Ensure workflow excludes PR comments
 
-The action only processes issue comments, not PR comments:
+The action only processes issue comments, not PR comments. Add this condition to your workflow's job:
 
 ```yaml
-if: github.event.issue.pull_request == null
+jobs:
+  process:
+    if: |
+      github.event.issue.pull_request == null &&
+      contains(github.event.issue.labels.*.name, 'approval-required')
 ```
+
+This ensures the job only runs for issue comments (not PR review comments).
 
 ### Check self-approval setting
 

@@ -134,17 +134,17 @@ jobs:
 
 ## Approval Modes
 
-Choose how approvers interact with approval requests:
+Choose how approvers interact with approval requests. The `approval_mode` setting is configured at the **workflow level**:
 
 | Mode | Description |
 |------|-------------|
-| `comments` | (Default) Approvers comment `/approve` on the issue |
+| `comments` | (Default) Approvers comment `approve` on the issue |
 | `sub_issues` | Creates a sub-issue for each stage - close to approve |
-| `hybrid` | Mix modes per stage using `approval_mode` |
+| `hybrid` | Mix modes per stage by overriding `approval_mode` on individual stages |
 
 ### Comments Mode (Default)
 
-Approvers comment on the main issue to advance stages:
+Approvers comment on the main issue to advance stages. Set at workflow level:
 
 ```yaml
 workflows:
@@ -276,25 +276,7 @@ The issue will include:
 
 The issue includes a Mermaid flowchart showing progress:
 
-```markdown
-### Pipeline Flow
-
-​```mermaid
-flowchart LR
-    DEV(DEV)
-    QA(QA)
-    STAGE(STAGE)
-    PROD(PROD)
-    DEV --> QA --> STAGE --> PROD
-
-    classDef completed fill:#28a745,stroke:#1e7e34,color:#fff
-    classDef current fill:#ffc107,stroke:#d39e00,color:#000
-    classDef pending fill:#6c757d,stroke:#545b62,color:#fff
-    class DEV completed
-    class QA current
-    class STAGE,PROD pending
-​```
-```
+The issue will display a Mermaid flowchart with color-coded stages showing deployment progress.
 
 Color meanings:
 - **Green** - Completed stages
@@ -311,12 +293,11 @@ pipeline:
 
 ## Release Strategies
 
-For enterprise environments where PRs merged to main aren't always immediate release candidates.
+For enterprise environments where PRs merged to main aren't always immediate release candidates, the pipeline supports multiple strategies:
 
-See [Release Strategies](RELEASE_STRATEGIES.md) for:
-- Tag-based releases (default)
-- Branch-based releases (GitFlow)
-- Label-based releases (flexible batching)
-- Milestone-based releases (roadmap alignment)
-- Auto-creation on completion
-- Hotfix deployment patterns
+- **Tag-based** (default) - PRs between two git tags
+- **Branch-based** - PRs merged to a release branch (GitFlow)
+- **Label-based** - PRs with a specific release label (flexible batching)
+- **Milestone-based** - PRs assigned to a GitHub milestone (roadmap alignment)
+
+Configure via `pipeline.release_strategy` in your workflow. See the main README's Configuration section for full options.

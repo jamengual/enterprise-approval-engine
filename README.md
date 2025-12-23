@@ -66,6 +66,11 @@ on:
       version:
         description: 'Version to deploy (e.g., v1.2.3)'
         required: true
+        type: string
+
+permissions:
+  contents: write
+  issues: write
 
 jobs:
   request:
@@ -91,9 +96,15 @@ on:
   issue_comment:
     types: [created]
 
+permissions:
+  contents: write
+  issues: write
+
 jobs:
   process:
-    if: contains(github.event.issue.labels.*.name, 'approval-required')
+    if: |
+      github.event.issue.pull_request == null &&
+      contains(github.event.issue.labels.*.name, 'approval-required')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -223,13 +223,15 @@ workflows:
 ```yaml
 issue:
   title: "Approval: {{version}}"
-  body: |                          # Inline custom template
+  body: |
     ## My Custom Approval Issue
     Version: {{.Version}}
-  body_file: "templates/my-template.md"  # Or load from file
+  body_file: "templates/my-template.md"
   labels: [production, deploy]
   assignees_from_policy: true
 ```
+
+Use either `body` for inline templates or `body_file` to load from a file (not both).
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
