@@ -3,7 +3,32 @@
 [![en](https://img.shields.io/badge/lang-en-blue.svg)](README.md)
 [![es](https://img.shields.io/badge/lang-es-yellow.svg)](ES/README.md)
 
-Enterprise-grade GitHub Action for policy-based approval workflows with per-group thresholds (X of N), OR logic between groups, and automatic semver tag creation.
+An **IssueOps-powered** GitHub Action for enterprise-grade approval workflows. Approvals happen through GitHub Issues - reviewers comment `approve` or `deny`, and the action handles the rest: policy validation, tag creation, and deployment triggers.
+
+> **What is IssueOps?** IssueOps uses GitHub Issues as the interface for operations. Instead of approving through a separate UI or CLI, approvers interact directly with GitHub Issues - commenting, closing sub-issues, or reacting. This provides a transparent audit trail, familiar UX, and native GitHub notifications.
+
+## IssueOps in Action
+
+<table>
+<tr>
+<td width="50%">
+
+**Issues list showing approval pipeline:**
+
+![IssueOps Issues List](docs/images/issueops-list.png)
+
+</td>
+<td width="50%">
+
+**Approval issue with sub-issues and pipeline visualization:**
+
+![IssueOps Issue Detail](docs/images/issueops-detail.jpeg)
+
+</td>
+</tr>
+</table>
+
+📋 **See it live:** [Example approval issue](https://github.com/jamengual/enterprise-approval-engine/issues/7)
 
 ## Features
 
@@ -27,10 +52,9 @@ Enterprise-grade GitHub Action for policy-based approval workflows with per-grou
 - **GitHub Enterprise Server**: Full support for GHES environments
 - **No External Dependencies**: Pure GitHub Actions, no external services required
 
-📋 **See it in action:** [Example approval issue](https://github.com/jamengual/enterprise-approval-engine/issues/7)
-
 ## Table of Contents
 
+- [IssueOps in Action](#issueops-in-action)
 - [Quick Start](#quick-start)
 - [Action Reference](#action-reference)
   - [Actions](#actions)
